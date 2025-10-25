@@ -1,4 +1,4 @@
-# Visited Countries Counter
+# country-counter
 
 This script counts the total number of unique countries visited based on a Google Takeout CSV export of saved places.
 
@@ -27,9 +27,10 @@ echo "GOOGLE_MAPS_API_KEY=<snip>" > .env
 ```
 
 2. Run the script:
-   ```bash
-   uv run scripts/count_visited_countries.py
-   ```
+
+```bash
+uv run scripts/count_visited_countries.py
+```
 
 ## Features
 
@@ -41,13 +42,22 @@ echo "GOOGLE_MAPS_API_KEY=<snip>" > .env
 ## Output Example
 
 ```
-Total unique countries visited: 15
+Total unique countries visited: 29
+Total unique US states visited: 4
 
 Countries (with location counts):
-  • United States of America: 234 locations
-  • Deutschland: 89 locations
-  • France: 45 locations
+  • Albania: 28 locations
+  • Australia: 97 locations
   ...
+
+US States (with location counts):
+  • California: 42 locations
+  • Florida: 14 locations
+  • Illinois: 16 locations
+  ...
+
+⚠️  Failed to lookup 39 location(s)
+These may need manual review. See failed_lookups.json for details.
 ```
 
 ## Cost Considerations
