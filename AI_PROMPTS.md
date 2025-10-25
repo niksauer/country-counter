@@ -1,0 +1,182 @@
+_Executed with Claude Sonnet 4_
+
+- Is there a Google Maps API to fetch all locations saved to a private list?
+
+```
+No, Google Maps does not provide a public API to fetch locations saved to a user's private lists.
+
+What's available:
+
+- Google Maps API - For embedding maps, geocoding, directions, etc., but not for accessing user's saved places
+- Places API - For searching/discovering places, but not for retrieving a user's personal saved lists
+
+Why:
+
+Private lists are part of a user's personal Google account data. Accessing them would require:
+
+- User authentication via OAuth 2.0
+- Access to Google's internal user data APIs (not publicly available)
+
+Alternatives:
+
+- Google Takeout - Users can manually export their saved places data
+- My Maps API - Can access maps a user has explicitly shared, but not the default "Saved Places" lists
+- Manual scraping - Violates Google's TOS and is unreliable
+
+[...]
+```
+
+- Given the attached CSV export for Google Takeout, create a script that counts the total number of visited countries.
+
+- Update the script to only use the Google Maps API since the CSV includes links to Google Maps locations which should all have a country set
+
+```
+I'll update the script to use the Google Maps API instead of the free geocoding service. Let me first check the current state of the file and then modify it to extract location data from the Google Maps URLs.
+
+[...]
+
+Summary of Changes
+- Updated to use Google Maps API instead of the free OpenStreetMap service
+  - Uses the official Geocoding API which is more reliable and accurate
+  - Extracts coordinates from Google Maps URLs when available
+  - Falls back to place name geocoding for other cases
+  - API Key requirement: The script now requires a GOOGLE_MAPS_API_KEY environment variable
+
+- Improved caching: Better cache key formatting (6 decimal places for coordinates)
+
+- Faster processing: Reduced delay between API calls from 1 second to 0.1 seconds (Google's rate limits are more generous)
+
+- Better error handling: Added KeyboardInterrupt handling for graceful stops
+
+[...]
+```
+
+- How do I obtain an API  key?
+
+- Why does this script return Vietnam as the country for the following link even though visiting it in the browser clearly shows it as being in Germany?
+
+```
+[...]
+
+Summary
+
+The issue with your script: The script was extracting "Hanoi" from the URL path and geocoding it, which returned Vietnam, even though the actual location (identified by the hex Place ID) is in Germany.
+
+The problem: Google Maps URLs can have misleading place names in the path. The URL structure /place/Hanoi/ doesn't necessarily mean the location is actually in Hanoi - it might be a search query or outdated information. The real location is identified by the hex Place ID in the data parameter.
+
+The solution I implemented:
+
+- Added detection for hex Place IDs: The script now checks if a URL contains hex identifiers like 1s0x47bd96fbe7bd5665:0xb82c2d0dbd9af2a0
+
+- Improved prioritization: When a URL has hex Place IDs, the script skips place name geocoding and warns about potential mismatches
+
+- Better logging: URLs with potential mismatches are clearly marked with ⚠️ warnings
+
+Result: Your specific URL will now:
+
+- Show a warning: ⚠️ Skipping place name 'Hanoi' (URL has hex ID - potential mismatch)
+- Be added to the failed lookups for manual review
+- Not incorrectly return "Vietnam" as the country
+
+This prevents false results while flagging cases that need manual attention. For URLs like yours, you would need to manually verify the actual location by visiting the URL in a browser, as you did.
+```
+
+- Which API is needed to lookup the hex ID?
+
+```
+[...]
+
+Recommended Approach
+
+Given the complexity and uncertainty around hex Place ID conversion, I'd recommend keeping the current solution I implemented, which:
+
+- Detects potential mismatches when hex Place IDs are present
+- Skips unreliable place name geocoding for such URLs
+- Flags them for manual review
+
+This prevents incorrect results (like your "Hanoi → Vietnam" issue) while acknowledging that some locations will need manual verification.
+
+If you really want to pursue automatic resolution of hex Place IDs, you would need to:
+
+- Enable the Google Places API in your Google Cloud Console
+- Experiment with whether the API accepts hex format Place IDs
+- Potentially research if there's a conversion method from hex to standard Place ID format
+
+But honestly, the manual review approach is probably more reliable and cost-effective for your use case.
+```
+
+- Try using the new Google Places API for only this URL
+
+```
+[...]
+
+Key Findings
+
+The APIs didn't reject the hex Place ID format - they failed due to API permissions/enablement issues, not because of the Place ID format itself. This suggests the hex format might actually be supported!
+
+Next Steps
+
+To properly test this, you would need to:
+
+- Enable the Places API (New) in your Google Cloud Console:
+
+  - Visit: https://console.developers.google.com/apis/api/places.googleapis.com/overview?project=246798676389
+  - Enable the API
+
+- Or enable the legacy Places API if you prefer that approach
+
+The test script is ready to run once you enable the appropriate API. The fact that both APIs responded with permission errors rather than "invalid place ID" errors is actually encouraging - it suggests the hex format might work!
+
+[...]
+```
+
+- I have enabled both APIs now
+
+```
+[...]
+
+Conclusion
+
+The hex Place ID format (0x47bd96fbe7bd5665:0xb82c2d0dbd9af2a0) from Google Maps URLs is not supported by Google's public Places APIs. These are internal Google identifiers that cannot be used with the public APIs.
+
+This confirms that the current approach in your script is correct:
+
+- Detect URLs with hex Place IDs ✓
+- Skip place name geocoding for these URLs ✓
+- Flag them for manual review ✓
+
+The hex Place IDs are internal to Google Maps and there's no public API to convert them to usable Place IDs or coordinates.
+
+[...]
+```
+
+- Does this post on decoding the hex ID help at all? https://stackoverflow.com/questions/44843934/get-lat-lon-from-google-maps-url-ftid-hex
+
+```
+[...]
+
+Excellent! This Stack Overflow post provides very valuable information. Let me create a solution based on the approaches mentioned there. The key insights are:
+
+The second hex value (after the colon) can be converted to a Customer ID (CID)
+You can use this CID with Google Maps URLs to get coordinates
+
+Two main approaches: URL scraping or Places API with CID parameter
+
+[...]
+```
+
+- Please integrate this into the main script
+
+- Update the script to also count the states when located in the US
+
+- Ignore the cache if it doesn't include the US state
+
+- Migrate the cache to the new format and remove all US entries
+
+- Make sure that this migration is only run once by adding a `schema_id` property to `cache.json`. Also update the code to always expect the latest schema. Do not support old formats.
+
+- Add a `--silent` flag that hides the live processing output
+
+- Make `--silent` the default
+
+- Output another file that tracks the failed lookups
