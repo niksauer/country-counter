@@ -4,9 +4,9 @@
 __pycache__/
 
 # --- Data ---
-cache.json
 failed_lookups.json
-Visited.csv
+cache/
+takeout/
 
 # --- Secrets ---
 .env

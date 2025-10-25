@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Script to count visited countries from Google Takeout "Visited" CSV export.
+Script to count countries from Google Takeout CSV export.
 Uses Google Maps Geocoding API to determine countries from coordinates.
 """
 
@@ -344,8 +344,9 @@ def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description='Count visited countries from Google Takeout "Visited" CSV export'
+        description='Count countries from Google Takeout CSV export'
     )
+    parser.add_argument('csv_file', help='Path to the CSV file to process')
     parser.add_argument(
         '--verbose',
         action='store_true',
@@ -362,9 +363,23 @@ def main():
         print('Error: GOOGLE_MAPS_API_KEY not found', file=sys.stderr)
         sys.exit(1)
 
-    csv_file = 'Visited.csv'
-    cache_file = 'cache.json'
-    failed_lookups_file = 'failed_lookups.json'
+    # Get CSV file from command line argument
+    csv_file = args.csv_file
+
+    # Check if CSV file exists
+    if not os.path.exists(csv_file):
+        print(f'Error: CSV file "{csv_file}" not found', file=sys.stderr)
+        sys.exit(1)
+
+    # Generate cache file names based on CSV filename
+    csv_basename = os.path.splitext(os.path.basename(csv_file))[0]
+    cache_dir = 'cache'
+
+    # Create cache directory if it doesn't exist
+    os.makedirs(cache_dir, exist_ok=True)
+
+    cache_file = os.path.join(cache_dir, f'{csv_basename}.json')
+    failed_lookups_file = os.path.join(cache_dir, f'{csv_basename}_failed_lookups.json')
 
     if args.verbose:
         print(f'Reading {csv_file}...')
@@ -480,9 +495,9 @@ def main():
     print('\n' + '=' * 70)
     print('RESULTS')
     print('=' * 70)
-    print(f'\nTotal unique countries visited: {len(unique_countries)}')
+    print(f'\nTotal unique countries: {len(unique_countries)}')
     if unique_us_states:
-        print(f'Total unique US states visited: {len(unique_us_states)}')
+        print(f'Total unique US states: {len(unique_us_states)}')
     print()
 
     print('Countries (with location counts):')

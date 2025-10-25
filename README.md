@@ -1,6 +1,6 @@
 # country-counter
 
-This script counts the total number of unique countries visited based on a Google Takeout CSV export of saved places.
+This script counts the total number of unique countries based on a Google Takeout CSV export of saved places.
 
 ## Prerequisites
 
@@ -11,7 +11,7 @@ This script counts the total number of unique countries visited based on a Googl
    - Create credentials (API key)
    - Copy the API key
 
-2. **CSV Export**: Export your "Visited" places from Google Takeout
+2. **CSV Export**: Export your places from Google Takeout
    - Go to [Google Takeout](https://takeout.google.com/)
    - Select "Maps (your places)"
    - Export and download the data
@@ -29,7 +29,7 @@ echo "GOOGLE_MAPS_API_KEY=<snip>" > .env
 2. Run the script:
 
 ```bash
-uv run scripts/count_visited_countries.py
+uv run scripts/count_countries.py path_to_takeout.csv
 ```
 
 ## Features
@@ -42,8 +42,8 @@ uv run scripts/count_visited_countries.py
 ## Output Example
 
 ```
-Total unique countries visited: 29
-Total unique US states visited: 4
+Total unique countries: 29
+Total unique US states: 4
 
 Countries (with location counts):
   • Albania: 28 locations
