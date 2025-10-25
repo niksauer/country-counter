@@ -321,6 +321,26 @@ def save_cache(cache: dict, cache_file: str):
         json.dump(cache_with_schema, f, ensure_ascii=False, indent=2)
 
 
+def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
+    """Save failed lookups to a separate JSON file for manual review."""
+    failed_data = {
+        'schema_version': 1,
+        'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+        'total_failed': len(failed_lookups),
+        'failed_locations': [
+            {
+                'title': title,
+                'url': url,
+                'reason': 'Unable to determine country from coordinates, hex Place ID, or place name',
+            }
+            for title, url in failed_lookups
+        ],
+    }
+
+    with open(failed_lookups_file, 'w', encoding='utf-8') as f:
+        json.dump(failed_data, f, ensure_ascii=False, indent=2)
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -344,6 +364,7 @@ def main():
 
     csv_file = 'Visited.csv'
     cache_file = 'cache.json'
+    failed_lookups_file = 'failed_lookups.json'
 
     if args.verbose:
         print(f'Reading {csv_file}...')
@@ -442,6 +463,14 @@ def main():
             print('\nSaving cache...')
         save_cache(cache, cache_file)
 
+        # Save failed lookups for manual review
+        if failed_lookups:
+            save_failed_lookups(failed_lookups, failed_lookups_file)
+            if args.verbose:
+                print(
+                    f'Saved {len(failed_lookups)} failed lookups to {failed_lookups_file}'
+                )
+
     # Count unique countries and US states
     country_counts = Counter(countries)
     us_state_counts = Counter(us_states)
@@ -468,8 +497,8 @@ def main():
             print(f'  • {state}: {count} location{"s" if count != 1 else ""}')
 
     if failed_lookups:
-        print(f'\n⚠️  Failed to determine country for {len(failed_lookups)} location(s)')
-        print('These may need manual review.')
+        print(f'\n⚠️  Failed to lookup {len(failed_lookups)} location(s)')
+        print('These may need manual review. See failed_lookups.json for details.')
 
     print('\n' + '=' * 70)
 

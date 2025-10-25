@@ -5,6 +5,7 @@ __pycache__/
 
 # --- Data ---
 cache.json
+failed_lookups.json
 Visited.csv
 
 # --- Secrets ---
