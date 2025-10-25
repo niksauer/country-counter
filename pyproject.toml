@@ -1,0 +1,159 @@
+[project]
+name = "maps-api"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.3.0",
+    "pyright>=1.1.404",
+    "ruff>=0.12.11",
+]
+
+[tool.pyright]
+include = ["scripts"]
+
+reportCallInDefaultInitializer = "error"
+reportConstantRedefinition = "error"
+reportDeprecated = "error"
+reportDuplicateImport = "error"
+reportFunctionMemberAccess = "error"
+reportIncompleteStub = "error"
+reportInconsistentConstructor = "error"
+reportIncompatibleVariableOverride = "none"
+reportInvalidStubStatement = "error"
+reportMatchNotExhaustive = "error"
+reportOverlappingOverload = "error"
+reportPrivateUsage = "error"
+reportPropertyTypeMismatch = "error"
+reportTypeCommentUsage = "error"
+reportUnknownLambdaType = "error"
+reportUnnecessaryCast = "error"
+reportUnnecessaryComparison = "error"
+reportUnnecessaryContains = "error"
+reportUnnecessaryIsInstance = "error"
+reportUnnecessaryTypeIgnoreComment = "error"
+reportUntypedBaseClass = "error"
+reportUntypedClassDecorator = "error"
+reportUntypedFunctionDecorator = "error"
+reportUntypedNamedTuple = "error"
+reportUnusedClass = "error"
+reportUnusedFunction = "error"
+reportUnusedImport = "error"
+reportUnusedVariable = "error"
+strictDictionaryInference = true
+strictListInference = true
+strictSetInference = true
+typeCheckingMode = "standard"
+
+venvPath = "."
+venv = ".venv"
+
+[tool.ruff]
+line-length = 90
+
+[tool.ruff.format]
+quote-style = "single"
+
+[tool.ruff.lint]
+# https://beta.ruff.rs/docs/rules/
+select = [
+    "B",    # flake8-bugbear
+    "BLE",  # flake8-blind-except
+    "C4",   # flake8-comprehensions
+    "E",    # pycodestyle: error
+    "EXE",  # flake8-executable
+    "F",    # pyflakes
+    "FA",   # flake8-future-annotations
+    "FLY",  # flynt
+    "FURB", # refurb
+    "G",    # flake8-logging-format
+    "I",    # isort
+    "ICN",  # flake8-import-conventions
+    "INT",  # flake8-gettext
+    "ISC",  # flake8-implicit-str-concat
+    "LOG",  # flake8-logging
+    "PERF", # perflint
+    "PGH",  # pygrep-hooks
+    "PIE",  # flake8-pie
+    "PLC",  # pylint: convention
+    "PLE",  # pylint: error
+    "PLR",  # pylint: refactor
+    "PLW",  # pylint: warning
+    "PYI",  # flake8-pyi
+    "RET",  # flake8-return
+    "RSE",  # flake8-raise
+    "RUF",  # ruff-specifc rules
+    "S",    # flake8-bandit
+    "SIM",  # flake8-simplify
+    "SLF",  # flake8-self
+    "SLOT", # flake8-slots
+    "T10",  # flake8-debugger
+    "TC",   # flake8-type-checking
+    "UP",   # pyupgrade
+    "YTT",  # flake8-2020
+
+    # DISABLED RULES
+    # "A",     # flake8-builtins           - We allow shadowing of builtins
+    # "ANN",   # flake8-annotations        - We are not ready yet
+    # "ARG",   # flake8-unused-arguments   - We allow unused arguments
+    # "C90",   # mccabe                    - Not useful
+    # "COM",   # flake8-commas             - We don't follow these conventions
+    # "D",     # pydocstyle                - Too onerous
+    # "DTZ",   # flake8-datetimez          - Not useful
+    # "EM",    # flake8-errmsg             - Not worth the trouble
+    # "ERA",   # eradicate                 - Removes a lot of our code examples
+    # "FBT",   # flake8-boolean-trap       - Not very useful
+    # "INP",   # flake8-no-pep420          - Not worth the trouble
+    # "N",     # pep8-naming               - We don't follow these conventions
+    # "PTH",   # flake8-use-pathlib        - Not worth the trouble
+    # "Q",     # flake8-quotes             - Superseded by ruff format
+    # "T20",   # flake8-print              - We allow print in parts of the codebase
+    # "TID",   # flake8-tidy-imports       - We don't follow these conventions
+    # "TRY",   # tryceratops               - Too onerous
+    # "W",     # pycodestyle: warning      - Superseded by ruff format
+]
+
+ignore = [
+    "B904",    # raise-without-from-inside-except
+    "B905",    # zip-without-explicit-strict
+    "E111",    # indentation-with-invalid-multiple (conflicts with ruff format)
+    "E114",    # indentation-with-invalid-multiple-comment (conflicts with ruff format)
+    "E117",    # over-indented (conflicts with ruff format)
+    "E501",    # line-too-long (conflicts with ruff format)
+    "G004",    # logging-f-string
+    "ISC002",  # multi-line-implicit-string-concatenation (conflicts with ruff format)
+    "PGH003",  # blanket-type-ignore
+    "PLC0415", # import-outside-top-level
+    "PLR0911", # too-many-return-statements
+    "PLR0912", # too-many-branches
+    "PLR0913", # too-many-arguments
+    "PLR0915", # too-many-statements
+    "PLR2004", # magic-value-comparison
+    "RET505",  # superfluous-else-return
+    "RET506",  # superfluous-else-raise
+    "RUF012",  # mutable-class-default
+    "S101",    # assert
+    "S105",    # hardcoded-password-string
+    "S106",    # hardcoded-password-func-arg
+    "S324",    # hashlib-insecure-hash-function
+    "SIM102",  # collapsible-if
+    "SIM105",  # use-contextlib-suppress
+    "SIM108",  # use-ternary-operator
+    "SIM114",  # if-with-same-arms
+    "SIM117",  # multiple-with-statements
+    "TC006",   # runtime-cast-value
+]
+
+[tool.ruff.lint.isort]
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder",
+]
+
+[tool.uv]
+package = false

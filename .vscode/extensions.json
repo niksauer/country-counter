@@ -1,0 +1,7 @@
+{
+  "recommendations": [
+    "charliermarsh.ruff",
+    "jasonnutter.vscode-codeowners",
+    "ms-python.python"
+  ]
+}

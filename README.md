@@ -26,7 +26,7 @@ This script counts the total number of unique countries visited based on a Googl
 
 2. Run the script:
    ```bash
-   python count_visited_countries.py
+   python scripts/count_visited_countries.py
    ```
 
 ## Features
