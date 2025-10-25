@@ -1,5 +1,7 @@
 # --- Python ---
 .venv
+*.pyc
+__pycache__/
 
 # --- Data ---
 cache.json

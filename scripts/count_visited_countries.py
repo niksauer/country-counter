@@ -10,12 +10,10 @@ import os
 import re
 import sys
 import time
-import urllib.error
-import urllib.parse
-import urllib.request
 from collections import Counter
 from urllib.parse import unquote
 
+import requests
 from dotenv import load_dotenv
 
 
@@ -76,29 +74,24 @@ def get_country_from_coordinates(
         return cache[cache_key]
 
     # Google Maps Geocoding API
-    params = urllib.parse.urlencode(
-        {'latlng': f'{lat},{lon}', 'key': api_key, 'result_type': 'country'}
-    )
-    url = f'https://maps.googleapis.com/maps/api/geocode/json?{params}'
+    params = {'latlng': f'{lat},{lon}', 'key': api_key, 'result_type': 'country'}
+    url = 'https://maps.googleapis.com/maps/api/geocode/json'
 
     try:
-        req = urllib.request.Request(url)  # noqa: S310
-        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
-            data = json.loads(response.read().decode())
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
 
-            if data.get('status') == 'OK' and data.get('results'):
-                # Extract country from the first result
-                for component in data['results'][0].get('address_components', []):
-                    if 'country' in component.get('types', []):
-                        country = component.get('long_name')
-                        cache[cache_key] = country
-                        return country
+        if data.get('status') == 'OK' and data.get('results'):
+            # Extract country from the first result
+            for component in data['results'][0].get('address_components', []):
+                if 'country' in component.get('types', []):
+                    country = component.get('long_name')
+                    cache[cache_key] = country
+                    return country
 
         time.sleep(0.1)  # Small delay to respect API rate limits
-    except (
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-    ) as e:
+    except requests.RequestException as e:
         print(f'Error: {e}', file=sys.stderr)
 
     cache[cache_key] = None
@@ -146,36 +139,31 @@ def get_country_from_hex_place_id(
         return None
 
     # Use Places API with CID parameter
-    params = urllib.parse.urlencode(
-        {
-            'cid': cid,
-            'key': api_key,
-            'fields': 'name,formatted_address,address_components,geometry',
-        }
-    )
-    url = f'https://maps.googleapis.com/maps/api/place/details/json?{params}'
+    params = {
+        'cid': cid,
+        'key': api_key,
+        'fields': 'name,formatted_address,address_components,geometry',
+    }
+    url = 'https://maps.googleapis.com/maps/api/place/details/json'
 
     try:
-        req = urllib.request.Request(url)  # noqa: S310
-        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
-            data = json.loads(response.read().decode())
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
 
-            if data.get('status') == 'OK' and 'result' in data:
-                result = data['result']
+        if data.get('status') == 'OK' and 'result' in data:
+            result = data['result']
 
-                # Extract country from address components
-                if 'address_components' in result:
-                    for component in result['address_components']:
-                        if 'country' in component.get('types', []):
-                            country = component.get('long_name')
-                            cache[cache_key] = country
-                            return country
+            # Extract country from address components
+            if 'address_components' in result:
+                for component in result['address_components']:
+                    if 'country' in component.get('types', []):
+                        country = component.get('long_name')
+                        cache[cache_key] = country
+                        return country
 
         time.sleep(0.1)  # Small delay to respect API rate limits
-    except (
-        urllib.error.URLError,
-        urllib.error.HTTPError,
-    ) as e:
+    except requests.RequestException as e:
         print(f'Error resolving hex Place ID: {e}', file=sys.stderr)
 
     cache[cache_key] = None
@@ -195,24 +183,24 @@ def get_country_from_place_name(place_name: str, api_key: str, cache: dict) -> s
         return cache[place_name]
 
     # Google Maps Geocoding API
-    params = urllib.parse.urlencode({'address': place_name, 'key': api_key})
-    url = f'https://maps.googleapis.com/maps/api/geocode/json?{params}'
+    params = {'address': place_name, 'key': api_key}
+    url = 'https://maps.googleapis.com/maps/api/geocode/json'
 
     try:
-        req = urllib.request.Request(url)  # noqa: S310
-        with urllib.request.urlopen(req, timeout=10) as response:  # noqa: S310
-            data = json.loads(response.read().decode())
+        response = requests.get(url, params=params, timeout=10)
+        response.raise_for_status()
+        data = response.json()
 
-            if data.get('status') == 'OK' and data.get('results'):
-                # Extract country from the first result
-                for component in data['results'][0].get('address_components', []):
-                    if 'country' in component.get('types', []):
-                        country = component.get('long_name')
-                        cache[place_name] = country
-                        return country
+        if data.get('status') == 'OK' and data.get('results'):
+            # Extract country from the first result
+            for component in data['results'][0].get('address_components', []):
+                if 'country' in component.get('types', []):
+                    country = component.get('long_name')
+                    cache[place_name] = country
+                    return country
 
         time.sleep(0.1)  # Small delay to respect API rate limits
-    except (urllib.error.URLError, urllib.error.HTTPError) as e:
+    except requests.RequestException as e:
         print(f'Error: {e}', file=sys.stderr)
 
     cache[place_name] = None
