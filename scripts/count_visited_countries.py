@@ -16,6 +16,8 @@ import urllib.request
 from collections import Counter
 from urllib.parse import unquote
 
+from dotenv import load_dotenv
+
 
 def extract_place_id(url: str) -> str | None:
     """
@@ -233,13 +235,13 @@ def save_cache(cache: dict, cache_file: str):
 
 
 def main():
+    # Load environment variables from .env file
+    load_dotenv()
+
     # Get API key from environment variable
     api_key = os.environ.get('GOOGLE_MAPS_API_KEY')
     if not api_key:
-        print('Error: GOOGLE_MAPS_API_KEY environment variable not set', file=sys.stderr)
-        print('\nUsage:', file=sys.stderr)
-        print("  export GOOGLE_MAPS_API_KEY='your-api-key-here'", file=sys.stderr)
-        print('  python3 count_visited_countries.py', file=sys.stderr)
+        print('Error: GOOGLE_MAPS_API_KEY not found', file=sys.stderr)
         sys.exit(1)
 
     csv_file = 'Visited.csv'

@@ -1,6 +1,9 @@
 # --- Python ---
 .venv
 
-# --- Local ---
+# --- Data ---
 cache.json
 Visited.csv
+
+# --- Secrets ---
+.env

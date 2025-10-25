@@ -19,14 +19,16 @@ This script counts the total number of unique countries visited based on a Googl
 
 ## Usage
 
-1. Set your Google Maps API key as an environment variable:
-   ```bash
-   export GOOGLE_MAPS_API_KEY='<snip>'
-   ```
+1. Set up your Google Maps API key:
+
+```bash
+# Create a .env file in the project root
+echo "GOOGLE_MAPS_API_KEY=<snip>" > .env
+```
 
 2. Run the script:
    ```bash
-   python scripts/count_visited_countries.py
+   uv run scripts/count_visited_countries.py
    ```
 
 ## Features
