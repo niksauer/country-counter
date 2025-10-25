@@ -4,6 +4,7 @@ Script to count visited countries from Google Takeout "Visited" CSV export.
 Uses Google Maps Geocoding API to determine countries from coordinates.
 """
 
+import argparse
 import csv
 import json
 import os
@@ -321,6 +322,17 @@ def save_cache(cache: dict, cache_file: str):
 
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(
+        description='Count visited countries from Google Takeout "Visited" CSV export'
+    )
+    parser.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Show live processing output (default is silent mode)',
+    )
+    args = parser.parse_args()
+
     # Load environment variables from .env file
     load_dotenv()
 
@@ -333,11 +345,13 @@ def main():
     csv_file = 'Visited.csv'
     cache_file = 'cache.json'
 
-    print(f'Reading {csv_file}...')
+    if args.verbose:
+        print(f'Reading {csv_file}...')
 
     # Load cache
     cache = load_cache(cache_file)
-    print(f'Loaded {len(cache)} cached locations')
+    if args.verbose:
+        print(f'Loaded {len(cache)} cached locations')
 
     countries = []
     us_states = []  # Track US states separately
@@ -349,9 +363,10 @@ def main():
             rows = list(reader)
             total = len(rows)
 
-            print(
-                f'Found {total} locations. Starting geocoding with Google Maps API...\n'
-            )
+            if args.verbose:
+                print(
+                    f'Found {total} locations. Starting geocoding with Google Maps API...\n'
+                )
 
             for idx, row in enumerate(rows, 1):
                 title = row.get('Titel', '')
@@ -360,11 +375,12 @@ def main():
                 if not url:
                     continue
 
-                print(
-                    f'[{idx}/{total}] Processing: {title or url[:50]}...',
-                    end=' ',
-                    flush=True,
-                )
+                if args.verbose:
+                    print(
+                        f'[{idx}/{total}] Processing: {title or url[:50]}...',
+                        end=' ',
+                        flush=True,
+                    )
 
                 # Try to extract coordinates first (most reliable)
                 coords = extract_coordinates_from_url(url)
@@ -383,7 +399,7 @@ def main():
                         country, state = get_location_info_from_hex_place_id(
                             hex_place_id, api_key, cache
                         )
-                        if country:
+                        if country and args.verbose:
                             print('🔍 Used hex Place ID')
 
                 # If still no result, fall back to place name (least reliable)
@@ -395,9 +411,10 @@ def main():
                             re.search(r'1s0x[0-9a-fA-F]+:0x[0-9a-fA-F]+', url)
                         )
                         if has_hex_id:
-                            print(
-                                f"⚠️ Place name '{place_name}' skipped (hex ID indicates potential mismatch)"
-                            )
+                            if args.verbose:
+                                print(
+                                    f"⚠️ Place name '{place_name}' skipped (hex ID indicates potential mismatch)"
+                                )
                         else:
                             country, state = get_location_info_from_place_name(
                                 place_name, api_key, cache
@@ -408,17 +425,21 @@ def main():
                     # Track US states
                     if country == 'United States' and state:
                         us_states.append(state)
-                        print(f'✓ {country} ({state})')
-                    else:
+                        if args.verbose:
+                            print(f'✓ {country} ({state})')
+                    elif args.verbose:
                         print(f'✓ {country}')
                 else:
                     failed_lookups.append((title, url))
-                    print('✗ Unable to determine country')
+                    if args.verbose:
+                        print('✗ Unable to determine country')
     except KeyboardInterrupt:
-        print('\n\nInterrupted by user. Saving progress...')
+        if args.verbose:
+            print('\n\nInterrupted by user. Saving progress...')
     finally:
         # Save cache even if interrupted
-        print('\nSaving cache...')
+        if args.verbose:
+            print('\nSaving cache...')
         save_cache(cache, cache_file)
 
     # Count unique countries and US states
