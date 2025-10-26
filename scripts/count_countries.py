@@ -89,9 +89,17 @@ def get_location_info_from_coordinates(
         if data.get('status') == 'OK' and data.get('results'):
             country = None
             state_info = None
+            coordinates = None
+
+            first_result = data['results'][0]
+
+            # Extract coordinates from geometry
+            if 'geometry' in first_result and 'location' in first_result['geometry']:
+                location = first_result['geometry']['location']
+                coordinates = {'lat': location.get('lat'), 'lng': location.get('lng')}
 
             # Extract country and state from the first result
-            for component in data['results'][0].get('address_components', []):
+            for component in first_result.get('address_components', []):
                 types = component.get('types', [])
                 if 'country' in types:
                     country = component.get('long_name')
@@ -103,8 +111,8 @@ def get_location_info_from_coordinates(
                         'code': code if code and code != name else None,
                     }
 
-            # Cache the result
-            result = {'country': country, 'state': state_info}
+            # Cache the result with coordinates
+            result = {'country': country, 'state': state_info, 'coordinates': coordinates}
             cache[cache_key] = result
             return country, state_info
 
@@ -112,7 +120,7 @@ def get_location_info_from_coordinates(
     except requests.RequestException as e:
         print(f'Error: {e}', file=sys.stderr)
 
-    cache[cache_key] = {'country': None, 'state': None}
+    cache[cache_key] = {'country': None, 'state': None, 'coordinates': None}
     return None, None
 
 
@@ -157,7 +165,7 @@ def get_location_info_from_hex_place_id(
     # Convert hex Place ID to Customer ID
     cid = hex_to_cid(hex_place_id)
     if not cid:
-        cache[cache_key] = {'country': None, 'state': None}
+        cache[cache_key] = {'country': None, 'state': None, 'coordinates': None}
         return None, None
 
     # Use Places API with CID parameter
@@ -177,6 +185,12 @@ def get_location_info_from_hex_place_id(
             result = data['result']
             country = None
             state_info = None
+            coordinates = None
+
+            # Extract coordinates from geometry
+            if 'geometry' in result and 'location' in result['geometry']:
+                location = result['geometry']['location']
+                coordinates = {'lat': location.get('lat'), 'lng': location.get('lng')}
 
             # Extract country and state from address components
             if 'address_components' in result:
@@ -192,8 +206,12 @@ def get_location_info_from_hex_place_id(
                             'code': code if code and code != name else None,
                         }
 
-            # Cache the result
-            result_data = {'country': country, 'state': state_info}
+            # Cache the result with coordinates
+            result_data = {
+                'country': country,
+                'state': state_info,
+                'coordinates': coordinates,
+            }
             cache[cache_key] = result_data
             return country, state_info
 
@@ -201,7 +219,7 @@ def get_location_info_from_hex_place_id(
     except requests.RequestException as e:
         print(f'Error resolving hex Place ID: {e}', file=sys.stderr)
 
-    cache[cache_key] = {'country': None, 'state': None}
+    cache[cache_key] = {'country': None, 'state': None, 'coordinates': None}
     return None, None
 
 
@@ -235,9 +253,17 @@ def get_location_info_from_place_name(
         if data.get('status') == 'OK' and data.get('results'):
             country = None
             state_info = None
+            coordinates = None
+
+            first_result = data['results'][0]
+
+            # Extract coordinates from geometry
+            if 'geometry' in first_result and 'location' in first_result['geometry']:
+                location = first_result['geometry']['location']
+                coordinates = {'lat': location.get('lat'), 'lng': location.get('lng')}
 
             # Extract country and state from the first result
-            for component in data['results'][0].get('address_components', []):
+            for component in first_result.get('address_components', []):
                 types = component.get('types', [])
                 if 'country' in types:
                     country = component.get('long_name')
@@ -249,8 +275,8 @@ def get_location_info_from_place_name(
                         'code': code if code and code != name else None,
                     }
 
-            # Cache the result
-            result = {'country': country, 'state': state_info}
+            # Cache the result with coordinates
+            result = {'country': country, 'state': state_info, 'coordinates': coordinates}
             cache[place_name] = result
             return country, state_info
 
@@ -258,11 +284,11 @@ def get_location_info_from_place_name(
     except requests.RequestException as e:
         print(f'Error: {e}', file=sys.stderr)
 
-    cache[place_name] = {'country': None, 'state': None}
+    cache[place_name] = {'country': None, 'state': None, 'coordinates': None}
     return None, None
 
 
-CACHE_SCHEMA_VERSION = 4
+CACHE_SCHEMA_VERSION = 5
 
 
 def migrate_cache_once(cache_data: dict) -> dict:
@@ -273,6 +299,7 @@ def migrate_cache_once(cache_data: dict) -> dict:
     v2: {'country': str, 'state': str | None}
     v3: split into shared and per-file caches
     v4: {'country': str, 'state': {'name': str, 'code': str | None} | None}
+    v5: {'country': str, 'state': {'name': str, 'code': str | None} | None, 'coordinates': {'lat': float, 'lng': float} | None}
     """
     current_version = cache_data.get('schema_version', 1)
 
@@ -293,30 +320,32 @@ def migrate_cache_once(cache_data: dict) -> dict:
 
     for key, value in cache_entries.items():
         if isinstance(value, str):
-            # v1 format - migrate to v4
+            # v1 format - migrate to v5
             if value == 'United States':
                 # Remove US entries so they get re-fetched with state info
                 removed_us_count += 1
                 continue
-            # Migrate non-US entries to v4 format
-            migrated_cache[key] = {'country': value, 'state': None}
+            # Migrate non-US entries to v5 format
+            migrated_cache[key] = {'country': value, 'state': None, 'coordinates': None}
             migrated_count += 1
         elif isinstance(value, dict):
             country = value.get('country')
             state = value.get('state')
+            coordinates = value.get('coordinates')
 
-            # Check if state needs migration from string to dict (v2/v3 → v4)
+            # Check if state needs migration from string to dict (v2/v3 → v4+)
             if state is not None and isinstance(state, str):
                 # Migrate string state to dict format
                 migrated_cache[key] = {
                     'country': country,
                     'state': {'name': state, 'code': None},
+                    'coordinates': coordinates,  # Preserve coordinates if present
                 }
                 migrated_count += 1
             elif state is not None and isinstance(state, dict):
                 # Check if this is old v4 format with 'short_name' field
                 if 'short_name' in state:
-                    # Migrate from old v4 (with 'short_name') to new v4 (with 'code' from 'short_name')
+                    # Migrate from old v4 (with 'short_name') to new v4+ (with 'code' from 'short_name')
                     name = state.get('name')
                     code = state.get('short_name')
                     # Set code to None if it matches name
@@ -326,17 +355,33 @@ def migrate_cache_once(cache_data: dict) -> dict:
                             'name': name,
                             'code': code if code and code != name else None,
                         },
+                        'coordinates': coordinates,  # Preserve coordinates if present
+                    }
+                    migrated_count += 1
+                # Already in v4+ format, but may need to add coordinates field for v5
+                elif 'coordinates' not in value:
+                    migrated_cache[key] = {
+                        'country': country,
+                        'state': state,
+                        'coordinates': None,
                     }
                     migrated_count += 1
                 else:
-                    # Already in new v4 format
+                    # Already in v5 format
                     migrated_cache[key] = value
+            # state is None, ensure coordinates field exists for v5
+            elif 'coordinates' not in value:
+                migrated_cache[key] = {
+                    'country': country,
+                    'state': state,
+                    'coordinates': None,
+                }
+                migrated_count += 1
             else:
-                # state is None or already correct
                 migrated_cache[key] = value
         elif value is None:
-            # Keep None values (failed lookups)
-            migrated_cache[key] = {'country': None, 'state': None}
+            # Keep None values (failed lookups) - migrate to v5 format
+            migrated_cache[key] = {'country': None, 'state': None, 'coordinates': None}
 
     print(
         f'Cache migration complete: {migrated_count} entries migrated, {removed_us_count} US entries removed for re-fetching'
@@ -503,18 +548,23 @@ def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
 
 def save_countries_json(country_states_map: dict, output_file: str):
     """
-    Save countries and their states to a JSON file with enhanced state information.
+    Save countries, their states, and location coordinates to a JSON file.
 
     Output format: [{
         "country": "Country Name",
         "count": 123,
         "states": [
-            {"name": "State Name", "code": null},
+            {"name": "State Name", "code": "ST"},
+            ...
+        ],
+        "locations": [
+            {"lat": 12.345, "lng": 67.890},
             ...
         ]
     }, ...]
 
     States are sorted alphabetically by name. Countries with no states have an empty array.
+    Locations contain coordinates from the cache for each visited place in that country.
     """
     output_data = []
 
@@ -533,8 +583,17 @@ def save_countries_json(country_states_map: dict, output_file: str):
 
         # Sort by name
         states_list.sort(key=lambda x: x.get('name', ''))  # type: ignore
+
+        # Get locations list (already contains dicts with lat/lng)
+        locations_list = data.get('locations', [])
+
         output_data.append(
-            {'country': country, 'count': data['count'], 'states': states_list}
+            {
+                'country': country,
+                'count': data['count'],
+                'states': states_list,
+                'locations': locations_list,
+            }
         )
 
     with open(output_file, 'w', encoding='utf-8') as f:
@@ -574,15 +633,17 @@ def main():
     # Generate cache file names based on CSV filename
     csv_basename = os.path.splitext(os.path.basename(csv_file))[0]
     cache_dir = 'cache'
+    build_dir = 'build'
 
-    # Create cache directory if it doesn't exist
+    # Create directories if they don't exist
     os.makedirs(cache_dir, exist_ok=True)
+    os.makedirs(build_dir, exist_ok=True)
 
     # v3 uses split caches: shared for hex/coord, per-file for place names
     shared_cache_file = os.path.join(cache_dir, 'shared_hex_coord_cache.json')
     place_name_cache_file = os.path.join(cache_dir, f'{csv_basename}_place_names.json')
     failed_lookups_file = os.path.join(cache_dir, f'{csv_basename}_failed_lookups.json')
-    countries_json_file = os.path.join(cache_dir, f'{csv_basename}_countries.json')
+    countries_json_file = os.path.join(build_dir, f'{csv_basename}_countries.json')
 
     if args.verbose:
         print(f'Reading {csv_file}...')
@@ -627,11 +688,16 @@ def main():
                 coords = extract_coordinates_from_url(url)
                 country = None
                 state_info = None
+                location_coords = None
 
                 if coords:
                     country, state_info = get_location_info_from_coordinates(
                         *coords, api_key, shared_cache
                     )
+                    # Store the location coordinates for this entry
+                    cache_key = f'{coords[0]:.6f},{coords[1]:.6f}'
+                    cached_data = shared_cache.get(cache_key, {})
+                    location_coords = cached_data.get('coordinates')
 
                 # If no coordinates, try hex Place ID (highly accurate)
                 if not country:
@@ -640,8 +706,13 @@ def main():
                         country, state_info = get_location_info_from_hex_place_id(
                             hex_place_id, api_key, shared_cache
                         )
-                        if country and args.verbose:
-                            print('🔍 Used hex Place ID')
+                        if country:
+                            # Store the location coordinates from cache
+                            cache_key = f'hex:{hex_place_id}'
+                            cached_data = shared_cache.get(cache_key, {})
+                            location_coords = cached_data.get('coordinates')
+                            if args.verbose:
+                                print('🔍 Used hex Place ID')
 
                 # If still no result, fall back to place name (least reliable)
                 if not country:
@@ -660,13 +731,31 @@ def main():
                             country, state_info = get_location_info_from_place_name(
                                 place_name, api_key, place_name_cache
                             )
+                            if country:
+                                # Store the location coordinates from cache
+                                cached_data = place_name_cache.get(place_name, {})
+                                location_coords = cached_data.get('coordinates')
 
                 if country:
-                    # Track states and counts per country
+                    # Track states, counts, and locations per country
                     if country not in country_states_map:
-                        country_states_map[country] = {'states': set(), 'count': 0}
+                        country_states_map[country] = {
+                            'states': set(),
+                            'count': 0,
+                            'locations': [],
+                        }
 
                     country_states_map[country]['count'] += 1
+
+                    # Add location coordinates if available
+                    if (
+                        location_coords
+                        and location_coords.get('lat')
+                        and location_coords.get('lng')
+                    ):
+                        country_states_map[country]['locations'].append(
+                            {'lat': location_coords['lat'], 'lng': location_coords['lng']}
+                        )
 
                     if state_info:
                         # Store state_info dict (will be serialized in save function)

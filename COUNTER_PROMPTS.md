@@ -185,6 +185,7 @@ Two main approaches: URL scraping or Places API with CID parameter
 
 ```
 [...]
+
 Summary
 
 I've successfully updated the count_visited_countries.py script to:
@@ -213,16 +214,18 @@ Any other CSV file follows the same pattern
 
 ```
 [...]
+
 Benefits:
 - Reduced API calls: Place IDs and coordinates found in one CSV file are automatically reused when processing other CSV files
 - Isolated place names: Place name lookups remain per-file to avoid ambiguity (e.g., "London" could refer to different locations)
 - Efficient storage: Shared cache eliminates duplication of hex/coordinate entries across files
 - Backward compatible: Automatic migration from v2 to v3 with backup of old files
 The implementation is complete and tested with all three CSV files in your repository!
+
 [...]
 ```
 
-- Update the script to output the countries and states therein as a JSON file with the following schema, expressed via TypeScript (`type Schema = ({ country: string, states: string[] })[]; `). This output should be in addition to the existing console logs.
+- Update the script to output the countries and states therein as a JSON file with the following schema, expressed via TypeScript (`type Schema = ({ country: string, states: string[] })[];`). This output should be in addition to the existing console logs.
 
 - Use the new `country_states_map` instead of the `countries` and `states` lists for console outputs
 
@@ -230,6 +233,7 @@ The implementation is complete and tested with all three CSV files in your repos
 
 ```
 [...]
+
 Actually, I realize you might want me to completely remove country_counts and derive the counts differently. Let me clarify - we still need to count how many locations are in each country. Currently:
 
 - countries list: contains duplicate country names (one per location)
@@ -243,6 +247,7 @@ We can keep both approaches, or if you want to eliminate the countries list enti
 
 ```
 [...]
+
 Benefits:
 - Single source of truth: All country data (counts and states) tracked in one structure
 - Cleaner code: Eliminated redundant data structures
@@ -251,3 +256,9 @@ Benefits:
 ```
 
 - Update the JSON file output to include the `count`
+
+- Move the `countries_json_file` output to the `build/` directory
+
+- Does the Google Maps API response for a location lookup include coordinates? If so, store them in the cache. Add a migration if necessary.
+
+- Update the JSON output to the following schema: `type Schema = ({ country: string, count: number, states: ({ name: string, code: string })[], locations: ({ lat: string, lng: string })[] })[];`
