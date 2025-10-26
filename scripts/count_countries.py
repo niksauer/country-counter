@@ -11,7 +11,6 @@ import os
 import re
 import sys
 import time
-from collections import Counter
 from urllib.parse import unquote
 
 import requests
@@ -432,6 +431,24 @@ def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
         json.dump(failed_data, f, ensure_ascii=False, indent=2)
 
 
+def save_countries_json(country_states_map: dict, output_file: str):
+    """
+    Save countries and their states to a JSON file.
+
+    Output format: [{"country": "Country Name", "count": 123, "states": ["State1", "State2"]}, ...]
+    States are sorted alphabetically. Countries with no states have an empty array.
+    """
+    output_data = []
+
+    for country in sorted(country_states_map.keys()):
+        data = country_states_map[country]
+        states = sorted(data['states'])
+        output_data.append({'country': country, 'count': data['count'], 'states': states})
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, ensure_ascii=False, indent=2)
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -473,6 +490,7 @@ def main():
     shared_cache_file = os.path.join(cache_dir, 'shared_hex_coord_cache.json')
     place_name_cache_file = os.path.join(cache_dir, f'{csv_basename}_place_names.json')
     failed_lookups_file = os.path.join(cache_dir, f'{csv_basename}_failed_lookups.json')
+    countries_json_file = os.path.join(cache_dir, f'{csv_basename}_countries.json')
 
     if args.verbose:
         print(f'Reading {csv_file}...')
@@ -484,8 +502,8 @@ def main():
             f'Loaded {len(shared_cache)} shared cached locations and {len(place_name_cache)} place name cached locations'
         )
 
-    countries = []
-    us_states = []  # Track US states separately
+    # Track states and counts per country: {country: {'states': set(states), 'count': int}}
+    country_states_map = {}
     failed_lookups = []
 
     try:
@@ -552,14 +570,21 @@ def main():
                             )
 
                 if country:
-                    countries.append(country)
-                    # Track US states
-                    if country == 'United States' and state:
-                        us_states.append(state)
-                        if args.verbose:
+                    # Track states and counts per country
+                    if country not in country_states_map:
+                        country_states_map[country] = {'states': set(), 'count': 0}
+
+                    country_states_map[country]['count'] += 1
+
+                    if state:
+                        country_states_map[country]['states'].add(state)
+
+                    # Print progress
+                    if args.verbose:
+                        if state:
                             print(f'✓ {country} ({state})')
-                    elif args.verbose:
-                        print(f'✓ {country}')
+                        else:
+                            print(f'✓ {country}')
                 else:
                     failed_lookups.append((title, url))
                     if args.verbose:
@@ -583,30 +608,34 @@ def main():
                     f'Saved {len(failed_lookups)} failed lookups to {failed_lookups_file}'
                 )
 
-    # Count unique countries and US states
-    country_counts = Counter(countries)
-    us_state_counts = Counter(us_states)
-    unique_countries = sorted(country_counts.keys())
-    unique_us_states = sorted(us_state_counts.keys()) if us_states else []
+    # Save countries and states to JSON file
+    save_countries_json(country_states_map, countries_json_file)
+    if args.verbose:
+        print(f'\nSaved countries and states to {countries_json_file}')
 
     print('\n' + '=' * 70)
     print('RESULTS')
     print('=' * 70)
-    print(f'\nTotal unique countries: {len(unique_countries)}')
-    if unique_us_states:
-        print(f'Total unique US states: {len(unique_us_states)}')
+    print(f'\nTotal unique countries: {len(country_states_map)}')
+
+    # Count total unique states across all countries
+    total_unique_states = sum(len(data['states']) for data in country_states_map.values())
+    if total_unique_states > 0:
+        print(f'Total unique states across all countries: {total_unique_states}')
     print()
 
-    print('Countries (with location counts):')
-    for country in unique_countries:
-        count = country_counts[country]
-        print(f'  • {country}: {count} location{"s" if count != 1 else ""}')
+    print('Countries (with location counts and states):')
+    for country in sorted(country_states_map.keys()):
+        data = country_states_map[country]
+        count = data['count']
+        states = sorted(data['states'])
 
-    if unique_us_states:
-        print('\nUS States (with location counts):')
-        for state in unique_us_states:
-            count = us_state_counts[state]
-            print(f'  • {state}: {count} location{"s" if count != 1 else ""}')
+        if states:
+            print(f'  • {country}: {count} location{"s" if count != 1 else ""}')
+            for state in states:
+                print(f'    - {state}')
+        else:
+            print(f'  • {country}: {count} location{"s" if count != 1 else ""}')
 
     if failed_lookups:
         print(f'\n⚠️  Failed to lookup {len(failed_lookups)} location(s)')

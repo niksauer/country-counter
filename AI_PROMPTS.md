@@ -221,3 +221,33 @@ Benefits:
 The implementation is complete and tested with all three CSV files in your repository!
 [...]
 ```
+
+- Update the script to output the countries and states therein as a JSON file with the following schema, expressed via TypeScript (`type Schema = ({ country: string, states: string[] })[]; `). This output should be in addition to the existing console logs.
+
+- Use the new `country_states_map` instead of the `countries` and `states` lists for console outputs
+
+- Replace `country_counts` with `country_states_map`
+
+```
+[...]
+Actually, I realize you might want me to completely remove country_counts and derive the counts differently. Let me clarify - we still need to count how many locations are in each country. Currently:
+
+- countries list: contains duplicate country names (one per location)
+- country_states_map: contains unique countries with their states
+- country_counts: counts occurrences in the countries list
+
+We can keep both approaches, or if you want to eliminate the countries list entirely, we'd need to track counts in country_states_map as well. Let me know if you'd like me to refactor this further to avoid maintaining the separate countries list!
+```
+
+- Yes, please track counts via `country_states_map`
+
+```
+[...]
+Benefits:
+- Single source of truth: All country data (counts and states) tracked in one structure
+- Cleaner code: Eliminated redundant data structures
+- Better maintainability: Less chance of inconsistencies between separate lists
+- Same functionality: All outputs (console and JSON) work exactly as before
+```
+
+- Update the JSON file output to include the `count`
