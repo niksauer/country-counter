@@ -53,6 +53,12 @@ def main():
         help='Title for the maps (default: determined by plot_countries.py based on options)',
     )
     parser.add_argument(
+        '--extension',
+        '-e',
+        default='svg',
+        help='File extension for output maps (default: svg)',
+    )
+    parser.add_argument(
         '--verbose',
         action='store_true',
         help='Show verbose output from count_countries.py',
@@ -138,26 +144,29 @@ def main():
     print(f'Step {"3" if secondary_csv_path else "2"}: Generating all map variations')
     print('=' * 70)
 
+    # Ensure extension starts with a dot
+    extension = args.extension if args.extension.startswith('.') else f'.{args.extension}'
+
     # Define all map variations with their settings and output filenames
     variations: list[dict[str, str | list[str]]] = [
         {
             'name': 'Default (states + country legend)',
-            'output': f'{csv_basename}_countries.svg',
+            'output': f'{csv_basename}_country_states{extension}',
             'flags': [],
         },
         {
             'name': 'States with labels',
-            'output': f'{csv_basename}_countries_labeled.svg',
+            'output': f'{csv_basename}_country_states_labeled{extension}',
             'flags': ['--show-labels'],
         },
         {
             'name': 'Full countries (no states)',
-            'output': f'{csv_basename}_countries_full.svg',
+            'output': f'{csv_basename}_country{extension}',
             'flags': ['--color-full-country'],
         },
         {
             'name': 'Full countries with labels',
-            'output': f'{csv_basename}_countries_full_labeled.svg',
+            'output': f'{csv_basename}_country_labeled{extension}',
             'flags': ['--color-full-country', '--show-labels'],
         },
     ]
