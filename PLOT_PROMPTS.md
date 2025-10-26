@@ -171,3 +171,43 @@ Store short_name in the code field instead of hardcoding None. This would give y
 - Remove any references to `short_name` and set `code` to `None` if it matches `name`
 
 - Update the plot script to iterate over the locations in the JSON output and infer the state based on the coordinates instead of the fuzzy matched state names
+
+- Make the output map more legible
+
+- The ocean doesn't appear blue
+
+- When mapping states, make the background color transparent and use the current highlight color for the border color
+
+- Use a lighter color if the entire country is highlighted
+
+- Update the legend accordingly
+
+- Make the state borders thinner to not overflow the country
+
+- Invert the color scheme by using a darker shade for fully visited countries and the same darker shade for the state borders but a lighter shade for the state background
+
+- Give every country (not state) a unique color and add a second legend to explain each
+
+- Move the legend in the center below Africa to not overlap any of the major continents
+
+- Use a darker state border to improve contrast if needed
+
+- Add a flag to directly draw the country (not state) names on the map. Omit the legend in that case
+
+- There are some warnings in the console output
+
+- Make the labels smaller to ensure they don't overlap each other
+
+- Keep the overview legend in all cases
+
+- Add a flag to color the entire country, regardless of the individual states visited
+
+- Why does the labeled version appear horizontally compressed compared to the full version?
+
+- Ensure that both versions are drawn on the same canvas size
+
+- The title appears to be cut off now
+
+- Remove the `--visited-color` flag since each country already uses a unique color
+
+- Remove the `--background-color` flag

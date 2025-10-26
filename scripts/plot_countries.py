@@ -8,11 +8,15 @@ Uses coordinates from the locations array to infer states spatially.
 import argparse
 import json
 import sys
+import warnings
 from pathlib import Path
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from shapely.geometry import Point
+
+# Suppress geopandas CRS warnings for centroid calculations
+warnings.filterwarnings('ignore', message='.*geographic CRS.*centroid.*')
 
 
 def load_countries_json(json_file: str) -> list[dict]:
@@ -28,20 +32,20 @@ def load_countries_json(json_file: str) -> list[dict]:
 
 def plot_world_map(
     countries_data: list[dict],
-    background_color: str = '#f0f0f0',
-    visited_color: str = '#ff6b6b',
     output_file: str | None = None,
     title: str = 'Visited Countries',
+    show_labels: bool = False,
+    color_full_country: bool = False,
 ):
     """
     Plot countries on a world map.
 
     Args:
         countries_data: List of country data with 'country', 'count', and 'states' fields
-        background_color: Background color for the map
-        visited_color: Color for visited countries
         output_file: Path to save the output image (optional)
         title: Title for the map
+        show_labels: If True, draw country names on the map and omit legends
+        color_full_country: If True, color the entire country instead of individual states
     """
     # Load world map data from Natural Earth
     world = gpd.read_file(
@@ -73,7 +77,7 @@ def plot_world_map(
 
     # If we have countries with locations, use coordinate-based state inference
     countries_to_plot_as_states = {}
-    if countries_with_locations:
+    if countries_with_locations and not color_full_country:
         # Load state/province boundaries from Natural Earth (10m resolution for better coverage)
         # This includes states/provinces for many countries including US, Canada, Australia, etc.
         print('Loading high-resolution state/province boundaries...')
@@ -142,100 +146,266 @@ def plot_world_map(
             print(
                 f'\nState-level highlighting for {len(countries_to_plot_as_states)} countries'
             )
+    elif color_full_country:
+        # If color_full_country is True, add all countries to full countries
+        states_world = None
+        for country in countries_with_locations:
+            mapped_country = country_mapping.get(country, country)
+            mapped_countries_full.add(mapped_country)
     else:
         states_world = None
 
     # Create a column for visited countries (only those being highlighted as full countries)
     world['visited'] = world['NAME'].isin(mapped_countries_full)  # pyright: ignore [reportArgumentType]
 
-    # Create figure and axis
-    fig, ax = plt.subplots(1, 1, figsize=(20, 10))
-    fig.patch.set_facecolor(background_color)
-    ax.set_facecolor(background_color)
+    # Create figure and axis with larger size for better legibility
+    # Use explicit subplot parameters to ensure consistent canvas size
+    fig, ax = plt.subplots(1, 1, figsize=(24, 12), subplot_kw={'adjustable': 'box'})
+    fig.subplots_adjust(left=0.05, right=0.95, top=0.90, bottom=0.05)
 
-    # Plot the base map (countries without specific states)
+    # Set ocean/background color
+    ocean_color = '#d6e5f5'  # Light blue for ocean
+    fig.patch.set_facecolor(ocean_color)
+    ax.set_facecolor(ocean_color)
+
+    # Generate unique colors for each country
+    import matplotlib.colors as mcolors
+
+    # Get all visited countries (both full and partial)
+    all_visited_countries = sorted(
+        set(mapped_countries_full) | set(countries_to_plot_as_states.keys())
+        if countries_to_plot_as_states
+        else mapped_countries_full
+    )
+
+    # Generate distinct colors using a colormap
+    num_countries = len(all_visited_countries)
+    # Use a qualitative colormap with many distinct colors
+    cmap = plt.colormaps.get_cmap('tab20' if num_countries <= 20 else 'hsv')
+    country_colors = {}
+    for idx, country in enumerate(all_visited_countries):
+        color = cmap(idx / max(num_countries - 1, 1))
+        country_colors[country] = mcolors.to_hex(color)
+
+    # Create color mapping for the world map
+    def get_country_color(name):
+        if name in mapped_countries_full:
+            return country_colors.get(name, '#f5f5f5')
+        return '#f5f5f5'
+
+    world['color'] = world['NAME'].apply(get_country_color)
+
+    # Plot the base map with unique colors for each visited country
     world.plot(
         ax=ax,
-        color=world['visited'].map({True: visited_color, False: '#e0e0e0'}),  # pyright: ignore [reportArgumentType]
-        edgecolor='white',
-        linewidth=0.5,
+        color=world['color'],
+        edgecolor='#888888',  # Darker gray for borders
+        linewidth=0.8,
     )
 
     # Plot states for countries with state-level data
     if countries_to_plot_as_states and states_world is not None:
-        for _original_country, state_indices in countries_to_plot_as_states.values():
+        for mapped_country, (
+            _original_country,
+            state_indices,
+        ) in countries_to_plot_as_states.items():
             # Filter states for this country using the matched indices
             country_states = states_world.loc[list(state_indices)]
 
-            # Plot these specific states with the visited color
+            # Get the country's unique color and create a lighter version
+            base_color = country_colors.get(mapped_country, '#999999')
+            rgb = mcolors.hex2color(base_color)
+            r, g, b = rgb[:3]
+            light_color = mcolors.to_hex(
+                (
+                    min(1.0, r * 0.6 + 0.4),
+                    min(1.0, g * 0.6 + 0.4),
+                    min(1.0, b * 0.6 + 0.4),
+                )
+            )
+
+            # Create a darker version of the base color for better contrast
+            dark_color = mcolors.to_hex(
+                (
+                    r * 0.5,
+                    g * 0.5,
+                    b * 0.5,
+                )
+            )
+
+            # Plot these specific states with lighter fill and darker border
             country_states.plot(
-                ax=ax, color=visited_color, edgecolor='white', linewidth=0.5
+                ax=ax,
+                facecolor=light_color,  # Lighter background
+                edgecolor=dark_color,  # Darker border for better contrast
+                linewidth=0.7,  # Thinner border to avoid overflow
             )
 
     # Remove axes
     ax.set_xlim(-180, 180)
     ax.set_ylim(-90, 90)
+    ax.set_aspect('equal', adjustable='box')
     ax.axis('off')
 
-    # Add country labels for visited countries (full countries only)
-    visited_countries = world[world['visited']]
-    for _idx, row in visited_countries.iterrows():
-        # Get the centroid of the country geometry
-        centroid = row['geometry'].centroid  # pyright: ignore [reportAttributeAccessIssue]
-        # Add text label at the centroid
-        ax.text(
-            centroid.x,
-            centroid.y,
-            row['NAME'],  # pyright: ignore [reportArgumentType]
-            fontsize=6,
-            ha='center',
-            va='center',
-            color='black',
-            weight='bold',
-            alpha=0.7,
-        )
+    # Add title with better positioning
+    plt.title(title, fontsize=28, pad=30, fontweight='bold', color='#333333')
 
-    # Add state labels for countries with state-level data
-    if countries_to_plot_as_states and states_world is not None:
-        for _original_country, state_indices in countries_to_plot_as_states.values():
-            country_states = states_world.loc[list(state_indices)]
-            for _idx, row in country_states.iterrows():
-                centroid = row['geometry'].centroid
-                ax.text(
-                    centroid.x,
-                    centroid.y,
-                    row['name'],
-                    fontsize=5,
-                    ha='center',
-                    va='center',
-                    color='black',
-                    weight='bold',
-                    alpha=0.6,
-                )
-
-    # Add title
-    plt.title(title, fontsize=24, pad=20, fontweight='bold')
-
-    # Add legend
+    # Add legend with better styling
     from matplotlib.patches import Patch
 
+    # Count countries and states
+    num_full_countries = len(mapped_countries_full)
+    num_state_countries = (
+        len(countries_to_plot_as_states) if countries_to_plot_as_states else 0
+    )
+    total_states = (
+        sum(
+            len(state_indices)
+            for _, state_indices in countries_to_plot_as_states.values()
+        )
+        if countries_to_plot_as_states
+        else 0
+    )
+
+    # First legend: General info (always shown)
     legend_elements = [
-        Patch(facecolor=visited_color, label=f'Visited ({len(countries_data)})'),
-        Patch(facecolor='#e0e0e0', label='Not visited'),
+        Patch(
+            facecolor='#999999',
+            edgecolor='#888888',
+            linewidth=1.5,
+            label=f'Fully Visited: {num_full_countries} countries',
+        ),
+        Patch(
+            facecolor='#cccccc',
+            edgecolor='#999999',
+            linewidth=1.5,
+            label=f'Partially Visited: {num_state_countries} countries ({total_states} states)',
+        ),
+        Patch(
+            facecolor='#f5f5f5',
+            edgecolor='#888888',
+            linewidth=1.5,
+            label='Not Visited',
+        ),
     ]
-    ax.legend(
+    legend1 = ax.legend(
         handles=legend_elements,
-        loc='lower left',
+        loc='center',
+        bbox_to_anchor=(0.25, 0.15),  # Position below Africa (left side)
         frameon=True,
         fancybox=True,
         shadow=True,
+        fontsize=12,
+        title='Overview',
+        title_fontsize=14,
     )
+    ax.add_artist(legend1)  # Add first legend to axes
 
-    plt.tight_layout()
+    # Either show labels or country legend
+    if show_labels:
+        # Draw country names directly on the map
+        for country in all_visited_countries:
+            # Get the country's geometry from the world dataset
+            country_geom = world[world['NAME'] == country]
+            if not country_geom.empty:
+                # Get centroid for label placement
+                centroid = country_geom.geometry.centroid.iloc[0]
 
-    # Save or show
+                # Get the original country name
+                original_name = country
+                for orig, mapped in country_mapping.items():
+                    if mapped == country:
+                        original_name = orig
+                        break
+
+                # Draw the label
+                ax.text(
+                    centroid.x,
+                    centroid.y,
+                    original_name,
+                    fontsize=5,
+                    ha='center',
+                    va='center',
+                    fontweight='bold',
+                    color='#333333',
+                    bbox={
+                        'boxstyle': 'round,pad=0.2',
+                        'facecolor': 'white',
+                        'edgecolor': '#888888',
+                        'alpha': 0.8,
+                        'linewidth': 0.3,
+                    },
+                )
+    else:
+        # Second legend: Country colors
+        # Create legend entries for each country with its unique color
+        country_legend_elements = []
+
+        # Add full countries
+        for country in sorted(mapped_countries_full):
+            color = country_colors.get(country, '#999999')
+            # Get the original country name (reverse mapping)
+            original_name = country
+            for orig, mapped in country_mapping.items():
+                if mapped == country:
+                    original_name = orig
+                    break
+            country_legend_elements.append(
+                Patch(
+                    facecolor=color,
+                    edgecolor='#888888',
+                    linewidth=0.5,
+                    label=original_name,
+                )
+            )
+
+        # Add state-level countries
+        if countries_to_plot_as_states:
+            for mapped_country, (
+                original_country,
+                _,
+            ) in countries_to_plot_as_states.items():
+                color = country_colors.get(mapped_country, '#999999')
+                rgb = mcolors.hex2color(color)
+                r, g, b = rgb[:3]
+                light_color = mcolors.to_hex(
+                    (
+                        min(1.0, r * 0.6 + 0.4),
+                        min(1.0, g * 0.6 + 0.4),
+                        min(1.0, b * 0.6 + 0.4),
+                    )
+                )
+                country_legend_elements.append(
+                    Patch(
+                        facecolor=light_color,
+                        edgecolor=color,
+                        linewidth=1.0,
+                        label=original_country,
+                    )
+                )
+
+        ax.legend(
+            handles=country_legend_elements,
+            loc='center',
+            bbox_to_anchor=(0.75, 0.15),
+            frameon=True,
+            fancybox=True,
+            shadow=True,
+            fontsize=10,
+            title='Countries',
+            title_fontsize=12,
+            ncol=2 if len(country_legend_elements) > 15 else 1,
+        )
+
+    # Save or show with higher DPI for better quality
     if output_file:
-        plt.savefig(output_file, dpi=300, bbox_inches='tight', facecolor=background_color)
+        plt.savefig(
+            output_file,
+            dpi=300,
+            facecolor=ocean_color,
+            edgecolor='none',
+            transparent=False,
+        )
         print(f'Map saved to: {output_file}')
     else:
         plt.show()
@@ -252,16 +422,6 @@ def main():
         help='Path to the countries JSON file (e.g., cache/Visited-Nik_countries.json)',
     )
     parser.add_argument(
-        '--background-color',
-        default='#f0f0f0',
-        help='Background color for the map (default: #f0f0f0)',
-    )
-    parser.add_argument(
-        '--visited-color',
-        default='#ff6b6b',
-        help='Color for visited countries (default: #ff6b6b)',
-    )
-    parser.add_argument(
         '--output',
         '-o',
         help='Output file path. If not provided, saves to build/ directory with same name as input.',
@@ -270,6 +430,16 @@ def main():
         '--title',
         default='Visited Countries',
         help='Title for the map (default: "Visited Countries")',
+    )
+    parser.add_argument(
+        '--show-labels',
+        action='store_true',
+        help='Draw country names directly on the map instead of showing legends',
+    )
+    parser.add_argument(
+        '--color-full-country',
+        action='store_true',
+        help='Color the entire country instead of individual states',
     )
 
     args = parser.parse_args()
@@ -301,10 +471,10 @@ def main():
     print('Generating map...')
     plot_world_map(
         countries_data,
-        background_color=args.background_color,
-        visited_color=args.visited_color,
         output_file=output_file,
         title=args.title,
+        show_labels=args.show_labels,
+        color_full_country=args.color_full_country,
     )
 
     print('Done!')
