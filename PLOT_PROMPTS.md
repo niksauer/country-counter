@@ -213,3 +213,9 @@ Store short_name in the code field instead of hardcoding None. This would give y
 - Remove the `--visited-color` flag since each country already uses a unique color
 
 - Remove the `--background-color` flag
+
+- Update the script to optionally take a second file input that is also plotted on the map but only on the country level. Only include these countries if they're not already plotted via the first file. Also, use a single background color for this second file. The legend entry for this second input should be "Want to visit".
+
+- For countries with states already plotted via the first data set, plot the remaining states encountered in the second data set
+
+- Why don't the "Want to visit" locations all use the same background color?

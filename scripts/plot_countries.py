@@ -36,6 +36,7 @@ def plot_world_map(
     title: str = 'Visited Countries',
     show_labels: bool = False,
     color_full_country: bool = False,
+    secondary_countries_data: list[dict] | None = None,
 ):
     """
     Plot countries on a world map.
@@ -46,6 +47,7 @@ def plot_world_map(
         title: Title for the map
         show_labels: If True, draw country names on the map and omit legends
         color_full_country: If True, color the entire country instead of individual states
+        secondary_countries_data: Optional list of country data to plot at country level only (want to visit)
     """
     # Load world map data from Natural Earth
     world = gpd.read_file(
@@ -75,9 +77,28 @@ def plot_world_map(
     for country in countries_without_locations:
         mapped_countries_full.add(country_mapping.get(country, country))
 
+    # Process secondary countries (want to visit)
+    # Separate into: new countries (not in primary) and additional locations for existing countries
+    secondary_countries = set()
+    secondary_countries_with_locations = {}
+    if secondary_countries_data:
+        primary_countries = {entry['country'] for entry in countries_data}
+        for entry in secondary_countries_data:
+            country = entry['country']
+            if country not in primary_countries:
+                # New country - add to full country set
+                mapped_country = country_mapping.get(country, country)
+                secondary_countries.add(mapped_country)
+            elif entry.get('locations') and not color_full_country:
+                # Country already in primary with locations - collect for state-level processing
+                secondary_countries_with_locations[country] = entry['locations']
+
     # If we have countries with locations, use coordinate-based state inference
     countries_to_plot_as_states = {}
-    if countries_with_locations and not color_full_country:
+    secondary_states_to_plot = {}  # Track secondary states separately for different coloring
+    if (
+        countries_with_locations or secondary_countries_with_locations
+    ) and not color_full_country:
         # Load state/province boundaries from Natural Earth (10m resolution for better coverage)
         # This includes states/provinces for many countries including US, Canada, Australia, etc.
         print('Loading high-resolution state/province boundaries...')
@@ -93,6 +114,7 @@ def plot_world_map(
         # Get list of countries that have state boundaries available
         available_countries = set(states_world['admin'].unique())
 
+        # Process primary countries with locations
         for country, locations in countries_with_locations.items():
             # Map country name to match Natural Earth dataset
             mapped_country = country_mapping.get(country, country)
@@ -141,6 +163,46 @@ def plot_world_map(
                 # Country not in states dataset, fall back to full country
                 mapped_countries_full.add(mapped_country)
 
+        # Process secondary countries with locations (only for countries already in primary with states)
+        if secondary_countries_with_locations:
+            print('\nProcessing secondary locations for existing countries...')
+            for country, locations in secondary_countries_with_locations.items():
+                mapped_country = country_mapping.get(country, country)
+
+                # Only process if this country already has states from primary data
+                if (
+                    mapped_country in countries_to_plot_as_states
+                    and mapped_country in available_countries
+                ):
+                    # Get the primary state indices to avoid duplicates
+                    _, primary_state_indices = countries_to_plot_as_states[mapped_country]
+                    matched_state_indices = set()
+
+                    for location in locations:
+                        lat = location.get('lat')
+                        lng = location.get('lng')
+
+                        if lat is None or lng is None:
+                            continue
+
+                        point = Point(lng, lat)
+                        country_states = states_world[
+                            states_world['admin'] == mapped_country
+                        ]
+
+                        for idx, state_row in country_states.iterrows():
+                            if state_row['geometry'].contains(point):  # pyright: ignore [reportAttributeAccessIssue]
+                                # Only add if not already in primary states
+                                if idx not in primary_state_indices:
+                                    matched_state_indices.add(idx)
+                                break
+
+                    if matched_state_indices:
+                        secondary_states_to_plot[mapped_country] = matched_state_indices
+                        print(
+                            f'  {country} ({mapped_country}): {len(matched_state_indices)} additional states from secondary data'
+                        )
+
         # Print summary of state-level highlighting
         if countries_to_plot_as_states:
             print(
@@ -187,10 +249,15 @@ def plot_world_map(
         color = cmap(idx / max(num_countries - 1, 1))
         country_colors[country] = mcolors.to_hex(color)
 
+    # Define a single color for secondary countries (want to visit)
+    secondary_color = '#FFE5B4'  # Peach/light orange color
+
     # Create color mapping for the world map
     def get_country_color(name):
         if name in mapped_countries_full:
             return country_colors.get(name, '#f5f5f5')
+        if name in secondary_countries:
+            return secondary_color
         return '#f5f5f5'
 
     world['color'] = world['NAME'].apply(get_country_color)
@@ -241,6 +308,31 @@ def plot_world_map(
                 linewidth=0.7,  # Thinner border to avoid overflow
             )
 
+        # Plot secondary states (want to visit) with secondary color
+        if secondary_states_to_plot:
+            print('\nPlotting secondary states...')
+            for state_indices in secondary_states_to_plot.values():
+                country_states = states_world.loc[list(state_indices)]
+
+                # Use the same secondary color as full countries
+                rgb = mcolors.hex2color(secondary_color)
+                r, g, b = rgb[:3]
+                dark_secondary = mcolors.to_hex(
+                    (
+                        r * 0.7,
+                        g * 0.7,
+                        b * 0.7,
+                    )
+                )
+
+                # Plot these secondary states with the same color as full secondary countries
+                country_states.plot(
+                    ax=ax,
+                    facecolor=secondary_color,  # Use same color as full countries
+                    edgecolor=dark_secondary,
+                    linewidth=0.7,
+                )
+
     # Remove axes
     ax.set_xlim(-180, 180)
     ax.set_ylim(-90, 90)
@@ -266,6 +358,12 @@ def plot_world_map(
         if countries_to_plot_as_states
         else 0
     )
+    num_secondary_countries = len(secondary_countries)
+    num_secondary_states = (
+        sum(len(state_indices) for state_indices in secondary_states_to_plot.values())
+        if secondary_states_to_plot
+        else 0
+    )
 
     # First legend: General info (always shown)
     legend_elements = [
@@ -281,13 +379,33 @@ def plot_world_map(
             linewidth=1.5,
             label=f'Partially Visited: {num_state_countries} countries ({total_states} states)',
         ),
+    ]
+
+    # Add secondary countries legend if present
+    if num_secondary_countries > 0 or num_secondary_states > 0:
+        parts = []
+        if num_secondary_countries > 0:
+            parts.append(f'{num_secondary_countries} countries')
+        if num_secondary_states > 0:
+            parts.append(f'{num_secondary_states} states')
+        label_text = f'Want to Visit: {", ".join(parts)}'
+        legend_elements.append(
+            Patch(
+                facecolor=secondary_color,
+                edgecolor='#888888',
+                linewidth=1.5,
+                label=label_text,
+            )
+        )
+
+    legend_elements.append(
         Patch(
             facecolor='#f5f5f5',
             edgecolor='#888888',
             linewidth=1.5,
             label='Not Visited',
-        ),
-    ]
+        )
+    )
     legend1 = ax.legend(
         handles=legend_elements,
         loc='center',
@@ -303,8 +421,9 @@ def plot_world_map(
 
     # Either show labels or country legend
     if show_labels:
-        # Draw country names directly on the map
-        for country in all_visited_countries:
+        # Draw country names directly on the map (including secondary countries)
+        all_labeled_countries = set(all_visited_countries) | secondary_countries
+        for country in all_labeled_countries:
             # Get the country's geometry from the world dataset
             country_geom = world[world['NAME'] == country]
             if not country_geom.empty:
@@ -384,6 +503,17 @@ def plot_world_map(
                     )
                 )
 
+        # Add secondary countries to the legend
+        if secondary_countries:
+            country_legend_elements.append(
+                Patch(
+                    facecolor=secondary_color,
+                    edgecolor='#888888',
+                    linewidth=0.5,
+                    label='Want to Visit',
+                )
+            )
+
         ax.legend(
             handles=country_legend_elements,
             loc='center',
@@ -422,6 +552,11 @@ def main():
         help='Path to the countries JSON file (e.g., cache/Visited-Nik_countries.json)',
     )
     parser.add_argument(
+        '--secondary-file',
+        '-s',
+        help='Path to a secondary countries JSON file for "want to visit" countries (plotted at country level only)',
+    )
+    parser.add_argument(
         '--output',
         '-o',
         help='Output file path. If not provided, saves to build/ directory with same name as input.',
@@ -449,6 +584,14 @@ def main():
         print(f'Error: JSON file "{args.json_file}" not found', file=sys.stderr)
         sys.exit(1)
 
+    # Check if secondary file exists (if provided)
+    if args.secondary_file and not Path(args.secondary_file).exists():
+        print(
+            f'Error: Secondary JSON file "{args.secondary_file}" not found',
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
     # Determine output file
     if args.output:
         output_file = args.output
@@ -467,6 +610,13 @@ def main():
     countries_data = load_countries_json(args.json_file)
     print(f'Found {len(countries_data)} countries')
 
+    # Load secondary countries if provided
+    secondary_countries_data = None
+    if args.secondary_file:
+        print(f'Loading secondary countries from {args.secondary_file}...')
+        secondary_countries_data = load_countries_json(args.secondary_file)
+        print(f'Found {len(secondary_countries_data)} secondary countries')
+
     # Plot map
     print('Generating map...')
     plot_world_map(
@@ -475,6 +625,7 @@ def main():
         title=args.title,
         show_labels=args.show_labels,
         color_full_country=args.color_full_country,
+        secondary_countries_data=secondary_countries_data,
     )
 
     print('Done!')
