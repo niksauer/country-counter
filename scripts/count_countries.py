@@ -245,7 +245,7 @@ def get_location_info_from_place_name(
     return None, None
 
 
-CACHE_SCHEMA_VERSION = 2
+CACHE_SCHEMA_VERSION = 3
 
 
 def migrate_cache_once(cache_data: dict) -> dict:
@@ -293,32 +293,123 @@ def migrate_cache_once(cache_data: dict) -> dict:
     return migrated_cache
 
 
-def load_cache(cache_file: str) -> dict:
-    """Load geocoding cache from file with schema versioning."""
-    if os.path.exists(cache_file):
-        with open(cache_file, encoding='utf-8') as f:
-            cache_data = json.load(f)
+def load_cache(shared_cache_file: str, place_name_cache_file: str) -> tuple[dict, dict]:
+    """
+    Load geocoding cache from split cache files.
 
-        # Check if migration is needed
-        if cache_data.get('schema_version', 1) < CACHE_SCHEMA_VERSION:
-            migrated_cache = migrate_cache_once(cache_data)
-            # Save the migrated cache immediately
-            save_cache(migrated_cache, cache_file)
-            return migrated_cache
+    Returns:
+        tuple: (shared_cache, place_name_cache)
+        - shared_cache: hex Place IDs and coordinates (shared across all input files)
+        - place_name_cache: place names (isolated per input file)
+    """
+    shared_cache = {}
+    place_name_cache = {}
 
-        # Return cache without schema_version key for compatibility
-        return {k: v for k, v in cache_data.items() if k != 'schema_version'}
+    # Check for old monolithic cache file for migration
+    old_cache_file = place_name_cache_file.replace('_place_names.json', '.json')
+    if os.path.exists(old_cache_file) and not old_cache_file.endswith(
+        '_place_names.json'
+    ):
+        # This is an old v1 or v2 cache that needs migration
+        print(f'Migrating old cache file: {old_cache_file}')
+        with open(old_cache_file, encoding='utf-8') as f:
+            old_cache_data = json.load(f)
 
-    return {}
+        # Migrate to v3 format
+        shared_cache_new, place_name_cache_new = migrate_cache_to_v3(old_cache_data)
+
+        # Load existing shared cache if it exists
+        if os.path.exists(shared_cache_file):
+            with open(shared_cache_file, encoding='utf-8') as f:
+                existing_shared = json.load(f)
+                # Remove schema_version key for compatibility
+                shared_cache = {
+                    k: v for k, v in existing_shared.items() if k != 'schema_version'
+                }
+
+        # Merge migrated shared cache into existing
+        shared_cache.update(shared_cache_new)
+        place_name_cache = place_name_cache_new
+
+        # Save the split caches
+        save_cache(
+            shared_cache, place_name_cache, shared_cache_file, place_name_cache_file
+        )
+
+        # Rename old cache file
+        os.rename(old_cache_file, old_cache_file + '.v2.bak')
+        print(f'Migrated and backed up old cache to: {old_cache_file}.v2.bak')
+
+        return shared_cache, place_name_cache
+
+    # Load shared cache (hex IDs and coordinates)
+    if os.path.exists(shared_cache_file):
+        with open(shared_cache_file, encoding='utf-8') as f:
+            shared_data = json.load(f)
+            # Remove schema_version key for compatibility
+            shared_cache = {k: v for k, v in shared_data.items() if k != 'schema_version'}
+
+    # Load place name cache (per-file)
+    if os.path.exists(place_name_cache_file):
+        with open(place_name_cache_file, encoding='utf-8') as f:
+            place_data = json.load(f)
+            # Remove schema_version key for compatibility
+            place_name_cache = {
+                k: v for k, v in place_data.items() if k != 'schema_version'
+            }
+
+    return shared_cache, place_name_cache
 
 
-def save_cache(cache: dict, cache_file: str):
-    """Save geocoding cache to file with schema version."""
-    cache_with_schema = {'schema_version': CACHE_SCHEMA_VERSION}
-    cache_with_schema.update(cache)
+def migrate_cache_to_v3(old_cache_data: dict) -> tuple[dict, dict]:
+    """
+    Migrate v1/v2 cache to v3 format by splitting into shared and place-name caches.
 
-    with open(cache_file, 'w', encoding='utf-8') as f:
-        json.dump(cache_with_schema, f, ensure_ascii=False, indent=2)
+    Returns:
+        tuple: (shared_cache, place_name_cache)
+    """
+    # First do v1->v2 migration if needed
+    if old_cache_data.get('schema_version', 1) < 2:
+        old_cache_data = {'schema_version': 2, **migrate_cache_once(old_cache_data)}
+
+    shared_cache = {}
+    place_name_cache = {}
+
+    # Remove schema_version from old data
+    cache_entries = {k: v for k, v in old_cache_data.items() if k != 'schema_version'}
+
+    for key, value in cache_entries.items():
+        # Hex Place IDs and coordinates go to shared cache
+        if key.startswith('hex:') or re.match(r'^-?\d+\.\d+,-?\d+\.\d+$', key):
+            shared_cache[key] = value
+        else:
+            # Place names go to per-file cache
+            place_name_cache[key] = value
+
+    print(
+        f'Split cache: {len(shared_cache)} shared entries, {len(place_name_cache)} place name entries'
+    )
+    return shared_cache, place_name_cache
+
+
+def save_cache(
+    shared_cache: dict,
+    place_name_cache: dict,
+    shared_cache_file: str,
+    place_name_cache_file: str,
+):
+    """Save geocoding caches to split cache files with schema version."""
+    # Save shared cache (hex and coordinates)
+    shared_with_schema = {'schema_version': CACHE_SCHEMA_VERSION}
+    shared_with_schema.update(shared_cache)
+    with open(shared_cache_file, 'w', encoding='utf-8') as f:
+        json.dump(shared_with_schema, f, ensure_ascii=False, indent=2)
+
+    # Save place name cache (per-file)
+    place_with_schema = {'schema_version': CACHE_SCHEMA_VERSION}
+    place_with_schema.update(place_name_cache)
+    with open(place_name_cache_file, 'w', encoding='utf-8') as f:
+        json.dump(place_with_schema, f, ensure_ascii=False, indent=2)
 
 
 def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
@@ -378,16 +469,20 @@ def main():
     # Create cache directory if it doesn't exist
     os.makedirs(cache_dir, exist_ok=True)
 
-    cache_file = os.path.join(cache_dir, f'{csv_basename}.json')
+    # v3 uses split caches: shared for hex/coord, per-file for place names
+    shared_cache_file = os.path.join(cache_dir, 'shared_hex_coord_cache.json')
+    place_name_cache_file = os.path.join(cache_dir, f'{csv_basename}_place_names.json')
     failed_lookups_file = os.path.join(cache_dir, f'{csv_basename}_failed_lookups.json')
 
     if args.verbose:
         print(f'Reading {csv_file}...')
 
-    # Load cache
-    cache = load_cache(cache_file)
+    # Load split caches
+    shared_cache, place_name_cache = load_cache(shared_cache_file, place_name_cache_file)
     if args.verbose:
-        print(f'Loaded {len(cache)} cached locations')
+        print(
+            f'Loaded {len(shared_cache)} shared cached locations and {len(place_name_cache)} place name cached locations'
+        )
 
     countries = []
     us_states = []  # Track US states separately
@@ -425,7 +520,7 @@ def main():
 
                 if coords:
                     country, state = get_location_info_from_coordinates(
-                        *coords, api_key, cache
+                        *coords, api_key, shared_cache
                     )
 
                 # If no coordinates, try hex Place ID (highly accurate)
@@ -433,7 +528,7 @@ def main():
                     hex_place_id = extract_place_id(url)
                     if hex_place_id:
                         country, state = get_location_info_from_hex_place_id(
-                            hex_place_id, api_key, cache
+                            hex_place_id, api_key, shared_cache
                         )
                         if country and args.verbose:
                             print('🔍 Used hex Place ID')
@@ -453,7 +548,7 @@ def main():
                                 )
                         else:
                             country, state = get_location_info_from_place_name(
-                                place_name, api_key, cache
+                                place_name, api_key, place_name_cache
                             )
 
                 if country:
@@ -476,7 +571,9 @@ def main():
         # Save cache even if interrupted
         if args.verbose:
             print('\nSaving cache...')
-        save_cache(cache, cache_file)
+        save_cache(
+            shared_cache, place_name_cache, shared_cache_file, place_name_cache_file
+        )
 
         # Save failed lookups for manual review
         if failed_lookups:

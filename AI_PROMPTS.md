@@ -208,3 +208,16 @@ Any other CSV file follows the same pattern
 
 [...]
 ```
+
+- Share the cache for place ID and coordinate based lookups between all input files. Keep the place name based lookups isolated to each input file. Migrate the cache schema and existing files in /cache if necessary.
+
+```
+[...]
+Benefits:
+- Reduced API calls: Place IDs and coordinates found in one CSV file are automatically reused when processing other CSV files
+- Isolated place names: Place name lookups remain per-file to avoid ambiguity (e.g., "London" could refer to different locations)
+- Efficient storage: Shared cache eliminates duplication of hex/coordinate entries across files
+- Backward compatible: Automatic migration from v2 to v3 with backup of old files
+The implementation is complete and tested with all three CSV files in your repository!
+[...]
+```
