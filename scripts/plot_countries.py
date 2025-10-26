@@ -13,21 +13,19 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 
 
-def load_countries_json(json_file: str) -> set[str]:
+def load_countries_json(json_file: str) -> list[dict]:
     """
     Load countries from JSON file.
 
     Returns:
-        set: Set of country names
+        list: List of country data dictionaries with 'country', 'count', and 'states' fields
     """
     with open(json_file, encoding='utf-8') as f:
-        data = json.load(f)
-
-    return {entry['country'] for entry in data}
+        return json.load(f)
 
 
 def plot_world_map(
-    countries: set[str],
+    countries_data: list[dict],
     background_color: str = '#f0f0f0',
     visited_color: str = '#ff6b6b',
     output_file: str | None = None,
@@ -37,7 +35,7 @@ def plot_world_map(
     Plot countries on a world map.
 
     Args:
-        countries: Set of country names to highlight
+        countries_data: List of country data with 'country', 'count', and 'states' fields
         background_color: Background color for the map
         visited_color: Color for visited countries
         output_file: Path to save the output image (optional)
@@ -56,20 +54,108 @@ def plot_world_map(
         'Tanzania': 'Tanzania',
     }
 
-    # Map visited countries
-    mapped_countries = set()
-    for country in countries:
-        mapped_countries.add(country_mapping.get(country, country))
+    # Create mapping of state names to handle variations
+    # Maps from our geocoded name to Natural Earth dataset name
+    state_mapping = {
+        'Île-de-France': 'Paris',  # France: Île-de-France region → Paris department
+        'Canterbury Region': 'Canterbury',  # New Zealand
+        'Southland Region': 'Southland',  # New Zealand
+    }
 
-    # Create a column for visited countries (note: Natural Earth uses 'NAME' column)
-    world['visited'] = world['NAME'].isin(mapped_countries)  # pyright: ignore [reportArgumentType]
+    # Separate countries into two groups: those with specific states and those without
+    countries_with_states = {
+        entry['country']: entry['states'] for entry in countries_data if entry['states']
+    }
+    countries_without_states = {
+        entry['country'] for entry in countries_data if not entry['states']
+    }
+
+    # Map country names for full-country highlighting
+    mapped_countries_full = set()
+    for country in countries_without_states:
+        mapped_countries_full.add(country_mapping.get(country, country))
+
+    # If we have countries with states, determine which ones can actually use state-level data
+    countries_to_plot_as_states = {}
+    if countries_with_states:
+        # Load state/province boundaries from Natural Earth (10m resolution for better coverage)
+        # This includes states/provinces for many countries including US, Canada, Australia, etc.
+        print('Loading high-resolution state/province boundaries...')
+        states_world = gpd.read_file(
+            'https://naciscdn.org/naturalearth/10m/cultural/ne_10m_admin_1_states_provinces.zip'
+        )
+        available_country_names = sorted(states_world['admin'].unique())
+        print(f'State-level data available for {len(available_country_names)} countries')
+        print(
+            f'Countries with state data: {", ".join(available_country_names[:10])}{"..." if len(available_country_names) > 10 else ""}'
+        )
+
+        # Get list of countries that have state boundaries available
+        available_countries = set(states_world['admin'].unique())
+
+        for country, states in countries_with_states.items():
+            # Map country name to match Natural Earth dataset
+            mapped_country = country_mapping.get(country, country)
+
+            # Check if this country has state boundaries available
+            if mapped_country in available_countries:
+                # Extract state names and variations from the state objects
+                # states is a list of dicts: [{"name": "...", "code": "..."}, ...]
+                state_names_to_match = set()
+                for state in states:
+                    # Try all available name variations
+                    if state.get('name'):
+                        state_names_to_match.add(state['name'])
+                        # Also add any mapped version
+                        if state['name'] in state_mapping:
+                            state_names_to_match.add(state_mapping[state['name']])
+                    # Also try matching by code (e.g., "CA" for California)
+                    if state.get('code'):
+                        state_names_to_match.add(state['code'])
+
+                # Check if the states exist in the dataset by matching against name or name_en
+                country_states = states_world[
+                    (states_world['admin'] == mapped_country)
+                    & (
+                        states_world['name'].isin(state_names_to_match)  # pyright: ignore [reportArgumentType]
+                        | states_world['name_en'].isin(state_names_to_match)  # pyright: ignore [reportArgumentType]
+                    )
+                ]
+                if not country_states.empty:
+                    # Save for state-level plotting
+                    countries_to_plot_as_states[mapped_country] = (
+                        country,
+                        list(state_names_to_match),
+                    )
+                else:
+                    # No states matched, fall back to full country
+                    print(
+                        f'Warning: No states matched for {country} ({mapped_country}). States: {[s.get("name") if isinstance(s, dict) else s for s in states]}'
+                    )
+                    mapped_countries_full.add(mapped_country)
+            else:
+                # Country not in states dataset, fall back to full country
+                mapped_countries_full.add(mapped_country)
+
+        # Print summary of state-level highlighting
+        if countries_to_plot_as_states:
+            print(
+                f'\nState-level highlighting for {len(countries_to_plot_as_states)} countries:'
+            )
+            for mapped_country, (_orig, states) in countries_to_plot_as_states.items():
+                print(f'  {mapped_country}: {len(states)} states')
+    else:
+        states_world = None
+
+    # Create a column for visited countries (only those being highlighted as full countries)
+    world['visited'] = world['NAME'].isin(mapped_countries_full)  # pyright: ignore [reportArgumentType]
 
     # Create figure and axis
     fig, ax = plt.subplots(1, 1, figsize=(20, 10))
     fig.patch.set_facecolor(background_color)
     ax.set_facecolor(background_color)
 
-    # Plot the map
+    # Plot the base map (countries without specific states)
     world.plot(
         ax=ax,
         color=world['visited'].map({True: visited_color, False: '#e0e0e0'}),  # pyright: ignore [reportArgumentType]
@@ -77,10 +163,76 @@ def plot_world_map(
         linewidth=0.5,
     )
 
+    # Plot states for countries with state-level data
+    if countries_to_plot_as_states and states_world is not None:
+        for mapped_country, (
+            _original_country,
+            states,
+        ) in countries_to_plot_as_states.items():
+            # Filter states for this country and the specific states visited
+            # Match against both 'name' and 'name_en' columns
+            country_states = states_world[
+                (states_world['admin'] == mapped_country)
+                & (
+                    states_world['name'].isin(states)
+                    | states_world['name_en'].isin(states)
+                )
+            ]
+
+            # Plot these specific states with the visited color
+            country_states.plot(
+                ax=ax, color=visited_color, edgecolor='white', linewidth=0.5
+            )
+
     # Remove axes
     ax.set_xlim(-180, 180)
     ax.set_ylim(-90, 90)
     ax.axis('off')
+
+    # Add country labels for visited countries (full countries only)
+    visited_countries = world[world['visited']]
+    for _idx, row in visited_countries.iterrows():
+        # Get the centroid of the country geometry
+        centroid = row['geometry'].centroid  # pyright: ignore [reportAttributeAccessIssue]
+        # Add text label at the centroid
+        ax.text(
+            centroid.x,
+            centroid.y,
+            row['NAME'],  # pyright: ignore [reportArgumentType]
+            fontsize=6,
+            ha='center',
+            va='center',
+            color='black',
+            weight='bold',
+            alpha=0.7,
+        )
+
+    # Add state labels for countries with state-level data
+    if countries_to_plot_as_states and states_world is not None:
+        for mapped_country, (
+            _original_country,
+            states,
+        ) in countries_to_plot_as_states.items():
+            country_states = states_world[
+                (states_world['admin'] == mapped_country)
+                & (
+                    states_world['name'].isin(states)
+                    | states_world['name_en'].isin(states)
+                )
+            ]
+            for _idx, row in country_states.iterrows():
+                centroid = row['geometry'].centroid  # pyright: ignore [reportAttributeAccessIssue]
+                ax.text(
+                    centroid.x,
+                    centroid.y,
+                    row['name'],  # pyright: ignore [reportArgumentType]
+                    fontsize=5,
+                    ha='center',
+                    va='center',
+                    color='black',
+                    weight='bold',
+                    alpha=0.6,
+                )
 
     # Add title
     plt.title(title, fontsize=24, pad=20, fontweight='bold')
@@ -89,7 +241,7 @@ def plot_world_map(
     from matplotlib.patches import Patch
 
     legend_elements = [
-        Patch(facecolor=visited_color, label=f'Visited ({len(countries)})'),
+        Patch(facecolor=visited_color, label=f'Visited ({len(countries_data)})'),
         Patch(facecolor='#e0e0e0', label='Not visited'),
     ]
     ax.legend(
@@ -163,13 +315,13 @@ def main():
 
     # Load countries
     print(f'Loading countries from {args.json_file}...')
-    countries = load_countries_json(args.json_file)
-    print(f'Found {len(countries)} countries')
+    countries_data = load_countries_json(args.json_file)
+    print(f'Found {len(countries_data)} countries')
 
     # Plot map
     print('Generating map...')
     plot_world_map(
-        countries,
+        countries_data,
         background_color=args.background_color,
         visited_color=args.visited_color,
         output_file=output_file,

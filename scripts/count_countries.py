@@ -63,18 +63,19 @@ def extract_place_name(title: str, url: str) -> str:
 
 def get_location_info_from_coordinates(
     lat: float, lon: float, api_key: str, cache: dict
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, dict | None]:
     """
-    Get country and state (if US) from coordinates using Google Maps Geocoding API.
-    Returns (country, state) tuple.
+    Get country and state info from coordinates using Google Maps Geocoding API.
+    Returns (country, state_info) tuple where state_info is a dict with 'name' and 'code'.
     """
 
     # Check cache first
     cache_key = f'{lat:.6f},{lon:.6f}'
     if cache_key in cache:
         cached = cache[cache_key]
-        # Always expect new format: {'country': 'Country', 'state': 'State'}
-        return cached.get('country'), cached.get('state')
+        country = cached.get('country')
+        state_info = cached.get('state')
+        return country, state_info
 
     # Google Maps Geocoding API (remove result_type to get full address components)
     params = {'latlng': f'{lat},{lon}', 'key': api_key}
@@ -87,7 +88,7 @@ def get_location_info_from_coordinates(
 
         if data.get('status') == 'OK' and data.get('results'):
             country = None
-            state = None
+            state_info = None
 
             # Extract country and state from the first result
             for component in data['results'][0].get('address_components', []):
@@ -95,12 +96,17 @@ def get_location_info_from_coordinates(
                 if 'country' in types:
                     country = component.get('long_name')
                 elif 'administrative_area_level_1' in types:
-                    state = component.get('long_name')
+                    name = component.get('long_name')
+                    code = component.get('short_name')
+                    state_info = {
+                        'name': name,
+                        'code': code if code and code != name else None,
+                    }
 
             # Cache the result
-            result = {'country': country, 'state': state}
+            result = {'country': country, 'state': state_info}
             cache[cache_key] = result
-            return country, state
+            return country, state_info
 
         time.sleep(0.1)  # Small delay to respect API rate limits
     except requests.RequestException as e:
@@ -131,10 +137,10 @@ def hex_to_cid(hex_place_id: str) -> str | None:
 
 def get_location_info_from_hex_place_id(
     hex_place_id: str, api_key: str, cache: dict
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, dict | None]:
     """
-    Get country and state (if US) from hex Place ID by converting to Customer ID and using Places API.
-    Returns (country, state) tuple.
+    Get country and state info from hex Place ID by converting to Customer ID and using Places API.
+    Returns (country, state_info) tuple where state_info is a dict with 'name' and 'code'.
     """
 
     if not hex_place_id:
@@ -144,8 +150,9 @@ def get_location_info_from_hex_place_id(
     cache_key = f'hex:{hex_place_id}'
     if cache_key in cache:
         cached = cache[cache_key]
-        # Always expect new format: {'country': 'Country', 'state': 'State'}
-        return cached.get('country'), cached.get('state')
+        country = cached.get('country')
+        state_info = cached.get('state')
+        return country, state_info
 
     # Convert hex Place ID to Customer ID
     cid = hex_to_cid(hex_place_id)
@@ -169,7 +176,7 @@ def get_location_info_from_hex_place_id(
         if data.get('status') == 'OK' and 'result' in data:
             result = data['result']
             country = None
-            state = None
+            state_info = None
 
             # Extract country and state from address components
             if 'address_components' in result:
@@ -178,12 +185,17 @@ def get_location_info_from_hex_place_id(
                     if 'country' in types:
                         country = component.get('long_name')
                     elif 'administrative_area_level_1' in types:
-                        state = component.get('long_name')
+                        name = component.get('long_name')
+                        code = component.get('short_name')
+                        state_info = {
+                            'name': name,
+                            'code': code if code and code != name else None,
+                        }
 
             # Cache the result
-            result_data = {'country': country, 'state': state}
+            result_data = {'country': country, 'state': state_info}
             cache[cache_key] = result_data
-            return country, state
+            return country, state_info
 
         time.sleep(0.1)  # Small delay to respect API rate limits
     except requests.RequestException as e:
@@ -195,10 +207,10 @@ def get_location_info_from_hex_place_id(
 
 def get_location_info_from_place_name(
     place_name: str, api_key: str, cache: dict
-) -> tuple[str | None, str | None]:
+) -> tuple[str | None, dict | None]:
     """
-    Get country and state (if US) from place name using Google Maps Geocoding API.
-    Returns (country, state) tuple.
+    Get country and state info from place name using Google Maps Geocoding API.
+    Returns (country, state_info) tuple where state_info is a dict with 'name' and 'code'.
     """
 
     if not place_name:
@@ -207,8 +219,9 @@ def get_location_info_from_place_name(
     # Check cache first
     if place_name in cache:
         cached = cache[place_name]
-        # Always expect new format: {'country': 'Country', 'state': 'State'}
-        return cached.get('country'), cached.get('state')
+        country = cached.get('country')
+        state_info = cached.get('state')
+        return country, state_info
 
     # Google Maps Geocoding API
     params = {'address': place_name, 'key': api_key}
@@ -221,7 +234,7 @@ def get_location_info_from_place_name(
 
         if data.get('status') == 'OK' and data.get('results'):
             country = None
-            state = None
+            state_info = None
 
             # Extract country and state from the first result
             for component in data['results'][0].get('address_components', []):
@@ -229,12 +242,17 @@ def get_location_info_from_place_name(
                 if 'country' in types:
                     country = component.get('long_name')
                 elif 'administrative_area_level_1' in types:
-                    state = component.get('long_name')
+                    name = component.get('long_name')
+                    code = component.get('short_name')
+                    state_info = {
+                        'name': name,
+                        'code': code if code and code != name else None,
+                    }
 
             # Cache the result
-            result = {'country': country, 'state': state}
+            result = {'country': country, 'state': state_info}
             cache[place_name] = result
-            return country, state
+            return country, state_info
 
         time.sleep(0.1)  # Small delay to respect API rate limits
     except requests.RequestException as e:
@@ -244,13 +262,17 @@ def get_location_info_from_place_name(
     return None, None
 
 
-CACHE_SCHEMA_VERSION = 3
+CACHE_SCHEMA_VERSION = 4
 
 
 def migrate_cache_once(cache_data: dict) -> dict:
     """
-    One-time migration from old cache format to new format with schema versioning.
-    Only runs if schema_version is missing or outdated.
+    Migrate cache from old format to new format with schema versioning.
+
+    v1: country as string
+    v2: {'country': str, 'state': str | None}
+    v3: split into shared and per-file caches
+    v4: {'country': str, 'state': {'name': str, 'code': str | None} | None}
     """
     current_version = cache_data.get('schema_version', 1)
 
@@ -271,17 +293,47 @@ def migrate_cache_once(cache_data: dict) -> dict:
 
     for key, value in cache_entries.items():
         if isinstance(value, str):
-            # Old format - migrate to new format
+            # v1 format - migrate to v4
             if value == 'United States':
                 # Remove US entries so they get re-fetched with state info
                 removed_us_count += 1
                 continue
-            # Migrate non-US entries to new format
+            # Migrate non-US entries to v4 format
             migrated_cache[key] = {'country': value, 'state': None}
             migrated_count += 1
         elif isinstance(value, dict):
-            # Already in new format - keep as is
-            migrated_cache[key] = value
+            country = value.get('country')
+            state = value.get('state')
+
+            # Check if state needs migration from string to dict (v2/v3 → v4)
+            if state is not None and isinstance(state, str):
+                # Migrate string state to dict format
+                migrated_cache[key] = {
+                    'country': country,
+                    'state': {'name': state, 'code': None},
+                }
+                migrated_count += 1
+            elif state is not None and isinstance(state, dict):
+                # Check if this is old v4 format with 'short_name' field
+                if 'short_name' in state:
+                    # Migrate from old v4 (with 'short_name') to new v4 (with 'code' from 'short_name')
+                    name = state.get('name')
+                    code = state.get('short_name')
+                    # Set code to None if it matches name
+                    migrated_cache[key] = {
+                        'country': country,
+                        'state': {
+                            'name': name,
+                            'code': code if code and code != name else None,
+                        },
+                    }
+                    migrated_count += 1
+                else:
+                    # Already in new v4 format
+                    migrated_cache[key] = value
+            else:
+                # state is None or already correct
+                migrated_cache[key] = value
         elif value is None:
             # Keep None values (failed lookups)
             migrated_cache[key] = {'country': None, 'state': None}
@@ -345,6 +397,15 @@ def load_cache(shared_cache_file: str, place_name_cache_file: str) -> tuple[dict
     if os.path.exists(shared_cache_file):
         with open(shared_cache_file, encoding='utf-8') as f:
             shared_data = json.load(f)
+            # Migrate if necessary
+            if shared_data.get('schema_version', 1) < CACHE_SCHEMA_VERSION:
+                shared_data = {
+                    'schema_version': CACHE_SCHEMA_VERSION,
+                    **migrate_cache_once(shared_data),
+                }
+                # Save migrated cache
+                with open(shared_cache_file, 'w', encoding='utf-8') as fw:
+                    json.dump(shared_data, fw, ensure_ascii=False, indent=2)
             # Remove schema_version key for compatibility
             shared_cache = {k: v for k, v in shared_data.items() if k != 'schema_version'}
 
@@ -352,6 +413,15 @@ def load_cache(shared_cache_file: str, place_name_cache_file: str) -> tuple[dict
     if os.path.exists(place_name_cache_file):
         with open(place_name_cache_file, encoding='utf-8') as f:
             place_data = json.load(f)
+            # Migrate if necessary
+            if place_data.get('schema_version', 1) < CACHE_SCHEMA_VERSION:
+                place_data = {
+                    'schema_version': CACHE_SCHEMA_VERSION,
+                    **migrate_cache_once(place_data),
+                }
+                # Save migrated cache
+                with open(place_name_cache_file, 'w', encoding='utf-8') as fw:
+                    json.dump(place_data, fw, ensure_ascii=False, indent=2)
             # Remove schema_version key for compatibility
             place_name_cache = {
                 k: v for k, v in place_data.items() if k != 'schema_version'
@@ -433,17 +503,39 @@ def save_failed_lookups(failed_lookups: list, failed_lookups_file: str):
 
 def save_countries_json(country_states_map: dict, output_file: str):
     """
-    Save countries and their states to a JSON file.
+    Save countries and their states to a JSON file with enhanced state information.
 
-    Output format: [{"country": "Country Name", "count": 123, "states": ["State1", "State2"]}, ...]
-    States are sorted alphabetically. Countries with no states have an empty array.
+    Output format: [{
+        "country": "Country Name",
+        "count": 123,
+        "states": [
+            {"name": "State Name", "code": null},
+            ...
+        ]
+    }, ...]
+
+    States are sorted alphabetically by name. Countries with no states have an empty array.
     """
     output_data = []
 
     for country in sorted(country_states_map.keys()):
         data = country_states_map[country]
-        states = sorted(data['states'])
-        output_data.append({'country': country, 'count': data['count'], 'states': states})
+        # Convert state tuples back to dicts and sort
+        states_list = []
+        for state_tuple in data['states']:
+            # State tuples are always (name, code)
+            if isinstance(state_tuple, tuple) and len(state_tuple) == 2:
+                name, code = state_tuple
+                state_dict = {'name': name}
+                if code is not None:
+                    state_dict['code'] = code
+                states_list.append(state_dict)
+
+        # Sort by name
+        states_list.sort(key=lambda x: x.get('name', ''))  # type: ignore
+        output_data.append(
+            {'country': country, 'count': data['count'], 'states': states_list}
+        )
 
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
@@ -534,10 +626,10 @@ def main():
                 # Try to extract coordinates first (most reliable)
                 coords = extract_coordinates_from_url(url)
                 country = None
-                state = None
+                state_info = None
 
                 if coords:
-                    country, state = get_location_info_from_coordinates(
+                    country, state_info = get_location_info_from_coordinates(
                         *coords, api_key, shared_cache
                     )
 
@@ -545,7 +637,7 @@ def main():
                 if not country:
                     hex_place_id = extract_place_id(url)
                     if hex_place_id:
-                        country, state = get_location_info_from_hex_place_id(
+                        country, state_info = get_location_info_from_hex_place_id(
                             hex_place_id, api_key, shared_cache
                         )
                         if country and args.verbose:
@@ -565,7 +657,7 @@ def main():
                                     f"⚠️ Place name '{place_name}' skipped (hex ID indicates potential mismatch)"
                                 )
                         else:
-                            country, state = get_location_info_from_place_name(
+                            country, state_info = get_location_info_from_place_name(
                                 place_name, api_key, place_name_cache
                             )
 
@@ -576,13 +668,20 @@ def main():
 
                     country_states_map[country]['count'] += 1
 
-                    if state:
-                        country_states_map[country]['states'].add(state)
+                    if state_info:
+                        # Store state_info dict (will be serialized in save function)
+                        # Convert to tuple for set storage: (name, code)
+                        state_tuple = (
+                            state_info.get('name'),
+                            state_info.get('code'),
+                        )
+                        country_states_map[country]['states'].add(state_tuple)
 
                     # Print progress
                     if args.verbose:
-                        if state:
-                            print(f'✓ {country} ({state})')
+                        if state_info:
+                            state_name = state_info.get('name', 'Unknown')
+                            print(f'✓ {country} ({state_name})')
                         else:
                             print(f'✓ {country}')
                 else:
@@ -628,11 +727,20 @@ def main():
     for country in sorted(country_states_map.keys()):
         data = country_states_map[country]
         count = data['count']
-        states = sorted(data['states'])
+        # Convert state tuples to readable format
+        states_list = []
+        for state_tuple in data['states']:
+            # State tuples are always (name, code)
+            if isinstance(state_tuple, tuple) and len(state_tuple) >= 1:
+                state_name = state_tuple[0]  # Get the name field
+                if state_name:
+                    states_list.append(state_name)
 
-        if states:
+        states_list.sort()
+
+        if states_list:
             print(f'  • {country}: {count} location{"s" if count != 1 else ""}')
-            for state in states:
+            for state in states_list:
                 print(f'    - {state}')
         else:
             print(f'  • {country}: {count} location{"s" if count != 1 else ""}')
