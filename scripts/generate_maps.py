@@ -50,7 +50,7 @@ def main():
     )
     parser.add_argument(
         '--title',
-        help='Title for the maps (default: "Visited Countries" or "My Travel Map" if secondary file is provided)',
+        help='Title for the maps (default: determined by plot_countries.py based on options)',
     )
     parser.add_argument(
         '--verbose',
@@ -59,10 +59,6 @@ def main():
     )
 
     args = parser.parse_args()
-
-    # Set default title based on whether secondary file is provided
-    if args.title is None:
-        args.title = 'My Travel Map' if args.secondary_file else 'Visited Countries'
 
     # Validate input file
     csv_path = Path(args.csv_file)
@@ -186,9 +182,11 @@ def main():
             str(json_file),
             '--output',
             str(output_path),
-            '--title',
-            args.title,
         ]
+
+        # Add title if explicitly provided
+        if args.title:
+            plot_cmd.extend(['--title', args.title])
 
         # Add secondary file if provided
         if secondary_json_file:

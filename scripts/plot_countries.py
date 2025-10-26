@@ -366,20 +366,37 @@ def plot_world_map(
     )
 
     # First legend: General info (always shown)
-    legend_elements = [
-        Patch(
-            facecolor='#999999',
-            edgecolor='#888888',
-            linewidth=1.5,
-            label=f'Fully Visited: {num_full_countries} countries',
-        ),
-        Patch(
-            facecolor='#cccccc',
-            edgecolor='#999999',
-            linewidth=1.5,
-            label=f'Partially Visited: {num_state_countries} countries ({total_states} states)',
-        ),
-    ]
+    legend_elements = []
+
+    if color_full_country:
+        # When coloring full countries, don't differentiate between fully/partially visited
+        total_visited = num_full_countries + num_state_countries
+        legend_elements.append(
+            Patch(
+                facecolor='#999999',
+                edgecolor='#888888',
+                linewidth=1.5,
+                label=f'Visited: {total_visited} countries',
+            )
+        )
+    else:
+        # Show distinction between fully and partially visited
+        legend_elements.extend(
+            [
+                Patch(
+                    facecolor='#999999',
+                    edgecolor='#888888',
+                    linewidth=1.5,
+                    label=f'Fully Visited: {num_full_countries} countries',
+                ),
+                Patch(
+                    facecolor='#cccccc',
+                    edgecolor='#999999',
+                    linewidth=1.5,
+                    label=f'Partially Visited: {num_state_countries} countries ({total_states} states)',
+                ),
+            ]
+        )
 
     # Add secondary countries legend if present
     if num_secondary_countries > 0 or num_secondary_states > 0:
@@ -563,8 +580,8 @@ def main():
     )
     parser.add_argument(
         '--title',
-        default='Visited Countries',
-        help='Title for the map (default: "Visited Countries")',
+        default=None,
+        help='Title for the map (default: "Visited Countries" or "My Travel Map" if secondary file provided)',
     )
     parser.add_argument(
         '--show-labels',
@@ -617,12 +634,22 @@ def main():
         secondary_countries_data = load_countries_json(args.secondary_file)
         print(f'Found {len(secondary_countries_data)} secondary countries')
 
+    # Set default title based on whether secondary file is provided and color mode
+    title = args.title
+    if title is None:
+        if args.secondary_file:
+            title = 'My Travel Map'
+        elif args.color_full_country:
+            title = 'Visited Countries'
+        else:
+            title = 'Visited States and Countries'
+
     # Plot map
     print('Generating map...')
     plot_world_map(
         countries_data,
         output_file=output_file,
-        title=args.title,
+        title=title,
         show_labels=args.show_labels,
         color_full_country=args.color_full_country,
         secondary_countries_data=secondary_countries_data,

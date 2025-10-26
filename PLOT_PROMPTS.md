@@ -219,3 +219,9 @@ Store short_name in the code field instead of hardcoding None. This would give y
 - For countries with states already plotted via the first data set, plot the remaining states encountered in the second data set
 
 - Why don't the "Want to visit" locations all use the same background color?
+
+- Default the title to "My Travel Map" if a secondary data set is provided
+
+- Do not differentiate between partially and fully visited countries when the `--color-full-country` flag is provided
+
+- Default the title to "Visited states and countries" if running without the `--color-full-country` flag
