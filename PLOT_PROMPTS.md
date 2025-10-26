@@ -1,3 +1,5 @@
+_Executed with Claude Sonnet 4.5_
+
 - Given a background color, create a new script to plot the countries in the JSON output on a world map
 
 - @terminal /explain There is an error when running the script

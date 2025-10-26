@@ -225,6 +225,8 @@ The implementation is complete and tested with all three CSV files in your repos
 [...]
 ```
 
+_Executed with Claude Sonnet 4.5_
+
 - Update the script to output the countries and states therein as a JSON file with the following schema, expressed via TypeScript (`type Schema = ({ country: string, states: string[] })[];`). This output should be in addition to the existing console logs.
 
 - Use the new `country_states_map` instead of the `countries` and `states` lists for console outputs
