@@ -44,9 +44,13 @@ def main():
         help='Path to the Google Takeout CSV file',
     )
     parser.add_argument(
+        '--secondary-file',
+        '-s',
+        help='Path to a secondary Google Takeout CSV file for "want to visit" countries',
+    )
+    parser.add_argument(
         '--title',
-        default='Visited Countries',
-        help='Title for the maps (default: "Visited Countries")',
+        help='Title for the maps (default: "Visited Countries" or "My Travel Map" if secondary file is provided)',
     )
     parser.add_argument(
         '--verbose',
@@ -56,11 +60,26 @@ def main():
 
     args = parser.parse_args()
 
+    # Set default title based on whether secondary file is provided
+    if args.title is None:
+        args.title = 'My Travel Map' if args.secondary_file else 'Visited Countries'
+
     # Validate input file
     csv_path = Path(args.csv_file)
     if not csv_path.exists():
         print(f'Error: CSV file "{args.csv_file}" not found', file=sys.stderr)
         sys.exit(1)
+
+    # Validate secondary file if provided
+    secondary_csv_path = None
+    if args.secondary_file:
+        secondary_csv_path = Path(args.secondary_file)
+        if not secondary_csv_path.exists():
+            print(
+                f'Error: Secondary file "{args.secondary_file}" not found',
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     # Determine output paths
     csv_basename = csv_path.stem
@@ -69,13 +88,15 @@ def main():
 
     json_file = build_dir / f'{csv_basename}_countries.json'
 
-    # Step 1: Run count_countries.py
+    # Step 1: Run count_countries.py on primary CSV
     count_cmd = ['uv', 'run', 'scripts/count_countries.py', str(csv_path)]
     if args.verbose:
         count_cmd.append('--verbose')
 
-    if not run_command(count_cmd, 'Step 1: Processing CSV and counting countries'):
-        print('\nFailed to process CSV file. Exiting.', file=sys.stderr)
+    if not run_command(
+        count_cmd, 'Step 1: Processing primary CSV and counting countries'
+    ):
+        print('\nFailed to process primary CSV file. Exiting.', file=sys.stderr)
         sys.exit(1)
 
     # Verify JSON file was created
@@ -85,9 +106,40 @@ def main():
 
     print(f'\n✓ Successfully created {json_file}')
 
-    # Step 2: Generate all map variations
+    # Step 2: Process secondary CSV if provided
+    secondary_json_file = None
+    if secondary_csv_path:
+        secondary_basename = secondary_csv_path.stem
+        secondary_json_file = build_dir / f'{secondary_basename}_countries.json'
+
+        count_cmd_secondary = [
+            'uv',
+            'run',
+            'scripts/count_countries.py',
+            str(secondary_csv_path),
+        ]
+        if args.verbose:
+            count_cmd_secondary.append('--verbose')
+
+        if not run_command(
+            count_cmd_secondary, 'Step 2: Processing secondary CSV and counting countries'
+        ):
+            print('\nFailed to process secondary CSV file. Exiting.', file=sys.stderr)
+            sys.exit(1)
+
+        # Verify secondary JSON file was created
+        if not secondary_json_file.exists():
+            print(
+                f'\nError: Expected secondary JSON file not found: {secondary_json_file}',
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        print(f'\n✓ Successfully created {secondary_json_file}')
+
+    # Step 3: Generate all map variations
     print('\n' + '=' * 70)
-    print('Step 2: Generating all map variations')
+    print(f'Step {"3" if secondary_csv_path else "2"}: Generating all map variations')
     print('=' * 70)
 
     # Define all map variations with their settings and output filenames
@@ -137,6 +189,11 @@ def main():
             '--title',
             args.title,
         ]
+
+        # Add secondary file if provided
+        if secondary_json_file:
+            plot_cmd.extend(['--secondary-file', str(secondary_json_file)])
+
         plot_cmd.extend(flags)
 
         if run_command(plot_cmd, f'  Creating {variation["output"]}'):
