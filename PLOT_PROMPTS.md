@@ -169,3 +169,5 @@ Store short_name in the code field instead of hardcoding None. This would give y
 - Yes, please use the `code` instead
 
 - Remove any references to `short_name` and set `code` to `None` if it matches `name`
+
+- Update the plot script to iterate over the locations in the JSON output and infer the state based on the coordinates instead of the fuzzy matched state names
